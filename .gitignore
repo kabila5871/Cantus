@@ -18,3 +18,5 @@ src-tauri/target/
 
 IMPLEMENTATION_PLAN.md
 prd.md
+# lazygit sidecar (fetched via scripts/fetch-lazygit.sh)
+src-tauri/binaries/
