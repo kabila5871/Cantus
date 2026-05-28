@@ -1,0 +1,106 @@
+:root {
+  --bg: #1b1d23;
+  --bg-raised: #21242b;
+  --border: #2e323b;
+  --text: #d7dae0;
+  --text-dim: #8b909a;
+  --accent: #5b9dd9;
+  font-family: -apple-system, "SF Pro Text", Inter, system-ui, sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+}
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 34px;
+  padding: 0 12px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+
+.titlebar__brand {
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.titlebar__path {
+  color: var(--text-dim);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titlebar__version {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.workspace {
+  flex: 1;
+  min-height: 0;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg);
+}
+
+.pane__title {
+  padding: 6px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+}
+
+.pane__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.resize {
+  background: var(--border);
+  transition: background 0.15s;
+}
+
+.resize:hover,
+.resize[data-resize-handle-active] {
+  background: var(--accent);
+}
+
+.resize--col {
+  width: 1px;
+}
+
+.resize--row {
+  height: 1px;
+}

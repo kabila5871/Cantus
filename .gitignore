@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Frontend build
+dist/
+dist-ssr/
+*.local
+
+# Rust / Tauri build
+src-tauri/target/
+
+# Editor / OS
+.DS_Store
+*.log
+
+# Claude Code local overrides
+.claude/settings.local.json
+
+IMPLEMENTATION_PLAN.md
+prd.md
