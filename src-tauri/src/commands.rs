@@ -601,8 +601,9 @@ pub async fn pty_spawn(
     cols: u16,
     rows: u16,
     program: Option<String>,
+    args: Option<Vec<String>>,
 ) -> Result<SpawnedTerminal, CommandError> {
-    let id = pty::spawn(&state, app, cols, rows, program)?;
+    let id = pty::spawn(&state, app, cols, rows, program, args)?;
     Ok(SpawnedTerminal { id })
 }
 

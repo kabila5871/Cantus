@@ -23,6 +23,7 @@ pub fn spawn(
     cols: u16,
     rows: u16,
     program: Option<String>,
+    args: Option<Vec<String>>,
 ) -> Result<u32, CommandError> {
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -43,7 +44,12 @@ pub fn spawn(
         // A named program (e.g. "claude") runs with the parent environment so it
         // resolves on PATH, plus a usable TERM since it never sources a profile.
         Some(prog) => {
-            let mut c = CommandBuilder::new(prog);
+            let mut c = CommandBuilder::new(&prog);
+            if let Some(ref argv) = args {
+                for a in argv {
+                    c.arg(a);
+                }
+            }
             for (k, v) in std::env::vars() {
                 c.env(k, v);
             }

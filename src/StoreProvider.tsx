@@ -1,6 +1,6 @@
 import { useState, useCallback, type ReactNode } from "react";
 import { StoreContext, type AppStore, type Buffer, type ChatMessage, type ProposeEdit, type PaneId } from "./store";
-import type { Project, DirEntry, GitStatus, AgentStatus, LspStatus, Selection, RecentEdit, EditorContext, ChatHistory } from "./ipc";
+import type { Project, DirEntry, GitStatus, AgentStatus, LspStatus, Selection, RecentEdit, EditorContext, ChatHistory, SessionMeta } from "./ipc";
 
 const MAX_RECENT_EDITS = 10;
 
@@ -32,6 +32,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     generation: 0,
   });
   const [focusedPane, setFocusedPane] = useState<PaneId>("editor");
+  const [chatLaunch, setChatLaunch] = useState<string | null>(null);
+  const [chatOpenSession, setChatOpenSessionState] = useState<SessionMeta | null>(null);
 
   const invalidatePath = useCallback((path: string) => {
     setInvalidatedPaths((prev) => new Set(prev).add(path));
@@ -228,6 +230,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const focusPane = useCallback((pane: PaneId) => setFocusedPane(pane), []);
+  const setChatLaunchCb = useCallback((v: string | null) => setChatLaunch(v), []);
+  const setChatOpenSession = useCallback((v: SessionMeta | null) => setChatOpenSessionState(v), []);
 
   const store: AppStore = {
     project,
@@ -272,6 +276,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setLspStatus,
     focusedPane,
     focusPane,
+    chatLaunch,
+    setChatLaunch: setChatLaunchCb,
+    chatOpenSession,
+    setChatOpenSession,
   };
 
   return (

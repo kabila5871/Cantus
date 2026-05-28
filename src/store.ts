@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { Project, DirEntry, GitStatus, AgentStatus, LspStatus, Selection, RecentEdit, EditorContext, ChatHistory } from "./ipc";
+import type { Project, DirEntry, GitStatus, AgentStatus, LspStatus, Selection, RecentEdit, EditorContext, ChatHistory, SessionMeta } from "./ipc";
 
 export type { EditorContext };
 
@@ -80,6 +80,14 @@ export interface AppStore {
   // Which pane is keyboard-focused.
   focusedPane: PaneId;
   focusPane: (pane: PaneId) => void;
+
+  // Cross-component bridge: text to send to the active chat PTY on next render.
+  chatLaunch: string | null;
+  setChatLaunch: (v: string | null) => void;
+
+  // Cross-component bridge: session to open/resume in the right-pane chat.
+  chatOpenSession: SessionMeta | null;
+  setChatOpenSession: (v: SessionMeta | null) => void;
 }
 
 export interface ProposeEdit {

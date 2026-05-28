@@ -1,169 +1,79 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DiffEditor, loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
-import * as ipc from "./ipc";
+import { gitDiff, gitStageHunk, gitStageLines } from "./ipc";
 import { type GitDiff, type GitHunk, type CommandError } from "./ipc";
 import { langFromPath } from "./lang";
 import { useStore } from "./store";
+import { defineCantusDarkTheme } from "./monacoTheme";
 
 loader.config({ monaco });
+defineCantusDarkTheme();
 
-// Defensive references to bindings the backend agent is adding.
-// They are typed as unknown here so tsc doesn't complain when the module
-// is ahead of the backend; the runtime typeof guard gates all calls.
-const _ipc = ipc as Record<string, unknown>;
-const _gitStageHunk = _ipc["gitStageHunk"] as
-  | ((path: string, hunkIndex: number) => Promise<ipc.GitStatus>)
-  | undefined;
-const _gitStageLines = _ipc["gitStageLines"] as
-  | ((path: string, hunkIndex: number, lineIndices: number[]) => Promise<ipc.GitStatus>)
-  | undefined;
+type ViewMode = "split" | "inline";
 
-const hasLineStaging = typeof _gitStageLines === "function";
-
-type ViewMode = "stage" | "inline" | "split";
-
-function HunkBlock({
-  hunk,
-  hunkIndex,
-  path,
-  onStaged,
-}: {
-  hunk: GitHunk;
-  hunkIndex: number;
-  path: string;
-  onStaged: () => void;
-}) {
-  const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set());
-  const [busy, setBusy] = useState(false);
-  const store = useStore();
-
-  const toggleLine = useCallback((idx: number) => {
-    setSelectedLines((prev) => {
-      const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
-      return next;
-    });
-  }, []);
-
-  const stageHunk = useCallback(async () => {
-    if (!_gitStageHunk) return;
-    setBusy(true);
-    try {
-      const status = await _gitStageHunk(path, hunkIndex);
-      store.setGitStatus(status);
-      onStaged();
-    } finally {
-      setBusy(false);
+// Maps a modified-editor line number to { hunkIndex, lineIndices } of all
+// addition lines within that hunk that fall on or before the given line.
+// Returns null if the line is not inside any hunk.
+function resolveLineRange(
+  hunks: GitHunk[],
+  fromLine: number,
+  toLine: number,
+): { hunkIndex: number; lineIndices: number[] } | null {
+  for (let hi = 0; hi < hunks.length; hi++) {
+    const hunk = hunks[hi];
+    const indices: number[] = [];
+    for (let li = 0; li < hunk.lines.length; li++) {
+      const line = hunk.lines[li];
+      if (
+        line.origin === "addition" &&
+        line.new_lineno !== null &&
+        line.new_lineno >= fromLine &&
+        line.new_lineno <= toLine
+      ) {
+        indices.push(li);
+      }
     }
-  }, [path, hunkIndex, onStaged, store]);
-
-  const stageSelected = useCallback(async () => {
-    if (!hasLineStaging || !_gitStageLines || selectedLines.size === 0) return;
-    setBusy(true);
-    try {
-      const status = await _gitStageLines(path, hunkIndex, [...selectedLines]);
-      store.setGitStatus(status);
-      onStaged();
-    } finally {
-      setBusy(false);
-    }
-  }, [path, hunkIndex, selectedLines, onStaged, store]);
-
-  const rangeLabel = `@@ -${hunk.old_start},${hunk.old_lines} +${hunk.new_start},${hunk.new_lines} @@`;
-
-  return (
-    <div className="stage-hunk">
-      <div className="stage-hunk__header">
-        <span className="stage-hunk__range">{rangeLabel}</span>
-        {hasLineStaging && selectedLines.size > 0 && (
-          <button
-            className="stage-hunk__btn stage-hunk__btn--selected"
-            disabled={busy}
-            onClick={stageSelected}
-          >
-            Stage selected ({selectedLines.size})
-          </button>
-        )}
-        <button
-          className="stage-hunk__btn"
-          disabled={busy || !_gitStageHunk}
-          onClick={stageHunk}
-        >
-          Stage hunk
-        </button>
-      </div>
-      <div className="stage-hunk__lines">
-        {hunk.lines.map((line, i) => {
-          const isChanged = line.origin !== "context";
-          const selected = selectedLines.has(i);
-          return (
-            <div
-              key={i}
-              className={[
-                "stage-line",
-                `stage-line--${line.origin}`,
-                isChanged && hasLineStaging ? "stage-line--selectable" : "",
-                selected ? "stage-line--selected" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              onClick={
-                isChanged && hasLineStaging ? () => toggleLine(i) : undefined
-              }
-            >
-              <span className="stage-line__gutter">
-                {line.origin === "addition"
-                  ? "+"
-                  : line.origin === "deletion"
-                    ? "-"
-                    : " "}
-              </span>
-              <span className="stage-line__lineno">
-                {line.origin !== "addition" && line.old_lineno != null
-                  ? String(line.old_lineno).padStart(4)
-                  : "    "}
-              </span>
-              <span className="stage-line__lineno">
-                {line.origin !== "deletion" && line.new_lineno != null
-                  ? String(line.new_lineno).padStart(4)
-                  : "    "}
-              </span>
-              <span className="stage-line__content">{line.content}</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+    if (indices.length > 0) return { hunkIndex: hi, lineIndices: indices };
+  }
+  return null;
 }
 
-function StageView({
-  diff,
-  path,
-  onRefresh,
-}: {
-  diff: GitDiff;
-  path: string;
-  onRefresh: () => void;
-}) {
-  if (diff.hunks.length === 0) {
-    return <div className="stage-view__empty">No unstaged changes.</div>;
+// Content widget that floats next to the cursor offering "Stage N lines".
+class StageSelectionWidget implements monaco.editor.IContentWidget {
+  private domNode: HTMLElement;
+  private position: monaco.editor.IContentWidgetPosition | null = null;
+  readonly getId = () => "cantus.stage-selection";
+
+  constructor(label: string, line: number, onClick: () => void) {
+    this.domNode = document.createElement("button");
+    this.domNode.className = "diff-gutter-stage-btn diff-gutter-stage-btn--float";
+    this.domNode.textContent = label;
+    this.domNode.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onClick();
+    });
+    this.position = {
+      position: { lineNumber: line, column: 1 },
+      preference: [
+        monaco.editor.ContentWidgetPositionPreference.ABOVE,
+        monaco.editor.ContentWidgetPositionPreference.BELOW,
+      ],
+    };
   }
-  return (
-    <div className="stage-view">
-      {diff.hunks.map((hunk, i) => (
-        <HunkBlock
-          key={i}
-          hunk={hunk}
-          hunkIndex={i}
-          path={path}
-          onStaged={onRefresh}
-        />
-      ))}
-    </div>
-  );
+
+  getDomNode = () => this.domNode;
+  getPosition = () => this.position;
+  updateLine(line: number) {
+    this.position = {
+      position: { lineNumber: line, column: 1 },
+      preference: [
+        monaco.editor.ContentWidgetPositionPreference.ABOVE,
+        monaco.editor.ContentWidgetPositionPreference.BELOW,
+      ],
+    };
+  }
 }
 
 export function DiffView() {
@@ -171,33 +81,168 @@ export function DiffView() {
   const path = store.diffPath;
   const [diff, setDiff] = useState<GitDiff | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<ViewMode>("inline");
+  const [mode, setMode] = useState<ViewMode>("split");
 
-  useEffect(() => {
-    if (!path) {
-      setDiff(null);
-      setError(null);
-      return;
-    }
-    setDiff(null);
-    setError(null);
-    void ipc.gitDiff(path)
+  // Refs for Monaco integration — not state because mutations must not re-render.
+  const decorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
+  const modifiedEditorRef = useRef<monaco.editor.ICodeEditor | null>(null);
+  const widgetRef = useRef<StageSelectionWidget | null>(null);
+  const diffRef = useRef<GitDiff | null>(null);
+
+  // Keep diffRef in sync so Monaco callbacks (which close over stale state) can
+  // read the latest hunks without re-registering listeners.
+  useEffect(() => { diffRef.current = diff; }, [diff]);
+
+  const fetchDiff = useCallback((p: string) => {
+    void gitDiff(p)
       .then((d) => setDiff(d))
       .catch((e: CommandError) => setError(e.message));
-  }, [path]);
+  }, []);
 
-  const handleStaged = useCallback(() => {
-    if (!path) return;
-    void ipc.gitDiff(path)
-      .then((d) => {
-        if (d.hunks.length === 0) {
-          store.closeDiff();
-        } else {
-          setDiff(d);
-        }
-      })
-      .catch((e: CommandError) => setError(e.message));
-  }, [path, store]);
+  useEffect(() => {
+    if (!path) { setDiff(null); setError(null); return; }
+    setDiff(null);
+    setError(null);
+    fetchDiff(path);
+  }, [path, fetchDiff]);
+
+  // Refresh after a stage action: re-fetch diff, update git status, close if clean.
+  const afterStage = useCallback(async (p: string) => {
+    try {
+      const d = await gitDiff(p);
+      if (d.hunks.length === 0) {
+        store.closeDiff();
+      } else {
+        setDiff(d);
+      }
+    } catch (e) {
+      setError((e as CommandError).message);
+    }
+  }, [store]);
+
+  // Place a "+" glyph in the gutter at each hunk's start line.
+  const applyDecorations = useCallback(
+    (editor: monaco.editor.ICodeEditor, d: GitDiff | null) => {
+      if (!d) {
+        decorationsRef.current?.clear();
+        return;
+      }
+      const lineCount = editor.getModel()?.getLineCount() ?? 0;
+      const decos: monaco.editor.IModelDeltaDecoration[] = d.hunks.map((hunk) => {
+        const line = Math.max(1, Math.min(hunk.new_start === 0 ? 1 : hunk.new_start, lineCount || 1));
+        return {
+          range: new monaco.Range(line, 1, line, 1),
+          options: {
+            glyphMarginClassName: "diff-gutter-stage-glyph",
+            glyphMarginHoverMessage: { value: "Stage hunk" },
+            stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+          },
+        };
+      });
+      if (decorationsRef.current) decorationsRef.current.set(decos);
+      else decorationsRef.current = editor.createDecorationsCollection(decos);
+    },
+    [],
+  );
+
+  // Re-apply when the diff changes (only fires once the editor is mounted).
+  useEffect(() => {
+    const editor = modifiedEditorRef.current;
+    if (editor) applyDecorations(editor, diff);
+  }, [diff, applyDecorations]);
+
+  // Remove the floating stage-lines widget.
+  const clearWidget = useCallback(() => {
+    const editor = modifiedEditorRef.current;
+    if (editor && widgetRef.current) {
+      editor.removeContentWidget(widgetRef.current);
+      widgetRef.current = null;
+    }
+  }, []);
+
+  const handleEditorMount = useCallback(
+    (diffEditor: monaco.editor.IStandaloneDiffEditor) => {
+      const modified = diffEditor.getModifiedEditor();
+      modifiedEditorRef.current = modified;
+
+      // onMount fires after the diff state is already set (and again on each
+      // mode remount), so apply the glyph decorations here — the [diff] effect
+      // alone runs before the editor exists and would miss them.
+      decorationsRef.current = null;
+      applyDecorations(modified, diffRef.current);
+
+      // Glyph-margin click → stage hunk.
+      modified.onMouseDown((e) => {
+        if (
+          e.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN ||
+          !e.target.position
+        ) return;
+        const clickedLine = e.target.position.lineNumber;
+        const currentDiff = diffRef.current;
+        if (!currentDiff || !path) return;
+
+        // Find hunk whose decoration line matches.
+        const model = modified.getModel();
+        const lineCount = model?.getLineCount() ?? 0;
+        const hunkIndex = currentDiff.hunks.findIndex((hunk) => {
+          const line = Math.max(1, Math.min(hunk.new_start === 0 ? 1 : hunk.new_start, lineCount || 1));
+          return line === clickedLine;
+        });
+        if (hunkIndex === -1) return;
+
+        void gitStageHunk(path, hunkIndex)
+          .then((status) => {
+            store.setGitStatus(status);
+            return afterStage(path);
+          })
+          .catch((err: CommandError) => setError(err.message));
+      });
+
+      // Selection change → show floating "Stage N lines" widget.
+      modified.onDidChangeCursorSelection((e) => {
+        clearWidget();
+        const currentDiff = diffRef.current;
+        if (!currentDiff || !path) return;
+
+        const sel = e.selection;
+        const startLine = sel.startLineNumber;
+        const endLine = sel.endLineNumber;
+        // Only show widget for non-collapsed selections.
+        if (startLine === endLine && sel.startColumn === sel.endColumn) return;
+
+        const resolved = resolveLineRange(currentDiff.hunks, startLine, endLine);
+        if (!resolved || resolved.lineIndices.length === 0) return;
+
+        const label = `Stage ${resolved.lineIndices.length} line${resolved.lineIndices.length === 1 ? "" : "s"}`;
+        const { hunkIndex, lineIndices } = resolved;
+
+        const widget = new StageSelectionWidget(label, startLine, () => {
+          clearWidget();
+          void gitStageLines(path, hunkIndex, lineIndices)
+            .then((status) => {
+              store.setGitStatus(status);
+              return afterStage(path);
+            })
+            .catch((err: CommandError) => setError(err.message));
+        });
+        widgetRef.current = widget;
+        modified.addContentWidget(widget);
+        modified.layoutContentWidget(widget);
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [path, store, afterStage, clearWidget, applyDecorations],
+  );
+
+  // Clean up decorations / widget when diff view closes.
+  useEffect(() => {
+    return () => {
+      clearWidget();
+      decorationsRef.current?.clear();
+      decorationsRef.current = null;
+      modifiedEditorRef.current = null;
+    };
+  }, [clearWidget]);
 
   if (!path) return null;
 
@@ -205,27 +250,21 @@ export function DiffView() {
     <div className="diff-view">
       <div className="diff-view__header">
         <span className="diff-view__path">{path}</span>
-
         <div className="diff-view__mode-btns">
-          {(["stage", "inline", "split"] as ViewMode[]).map((m) => (
+          {(["split", "inline"] as ViewMode[]).map((m) => (
             <button
               key={m}
               className={[
                 "diff-view__mode-btn",
                 mode === m ? "diff-view__mode-btn--active" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
+              ].filter(Boolean).join(" ")}
               onClick={() => setMode(m)}
             >
               {m.charAt(0).toUpperCase() + m.slice(1)}
             </button>
           ))}
         </div>
-
-        <button className="diff-view__close" onClick={store.closeDiff}>
-          ✕
-        </button>
+        <button className="diff-view__close" onClick={store.closeDiff}>✕</button>
       </div>
 
       {error && <div className="diff-view__error">{error}</div>}
@@ -234,24 +273,22 @@ export function DiffView() {
         <div className="diff-view__binary">Binary file — no diff available</div>
       )}
 
-      {diff && !diff.binary && mode === "stage" && (
-        <div className="diff-view__stage">
-          <StageView diff={diff} path={path} onRefresh={handleStaged} />
-        </div>
-      )}
-
-      {diff && !diff.binary && mode !== "stage" && (
+      {diff && !diff.binary && (
         <div className="diff-view__monaco">
           <DiffEditor
-            theme="vs-dark"
+            key={mode}
+            height="100%"
+            theme="cantus-dark"
             language={langFromPath(path)}
             original={diff.old_text}
             modified={diff.new_text}
+            onMount={handleEditorMount}
             options={{
               renderSideBySide: mode === "split",
               readOnly: true,
+              glyphMargin: true,
               fontSize: 13,
-              fontFamily: '"SF Mono", "Cascadia Code", Menlo, monospace',
+              fontFamily: '"JetBrains Mono", monospace',
               minimap: { enabled: false },
               scrollBeyondLastLine: false,
             }}

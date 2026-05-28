@@ -6,8 +6,10 @@ import { useStore } from "./store";
 import { acceptPendingEdit, rejectPendingEdit } from "./keybindings";
 import { langFromPath } from "./lang";
 import { ensurePythonLsp, teardownLsp } from "./lsp";
+import { defineCantusDarkTheme } from "./monacoTheme";
 
 loader.config({ monaco });
+defineCantusDarkTheme();
 
 function TabBar() {
   const store = useStore();
@@ -85,7 +87,7 @@ function ProposedEditDiff({
       </div>
       <div className="proposed-diff__monaco">
         <DiffEditor
-          theme="vs-dark"
+          theme="cantus-dark"
           language={langFromPath(path)}
           original={original}
           modified={newContent}
@@ -93,7 +95,7 @@ function ProposedEditDiff({
             renderSideBySide: false,
             readOnly: true,
             fontSize: 13,
-            fontFamily: '"SF Mono", "Cascadia Code", Menlo, monospace',
+            fontFamily: '"JetBrains Mono", monospace',
             minimap: { enabled: false },
             scrollBeyondLastLine: false,
           }}
@@ -281,13 +283,13 @@ export function EditorPane() {
       )}
       <div className="editor-pane__monaco">
         <MonacoEditor
-          theme="vs-dark"
+          theme="cantus-dark"
           path={activePath ?? undefined}
           defaultValue={activeBuf.content}
           language={langFromPath(activePath ?? "")}
           options={{
             fontSize: 13,
-            fontFamily: '"SF Mono", "Cascadia Code", Menlo, monospace',
+            fontFamily: '"JetBrains Mono", monospace',
             minimap: { enabled: false },
             scrollBeyondLastLine: false,
             renderWhitespace: "selection",

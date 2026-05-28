@@ -340,82 +340,83 @@ pub fn discard(root: &Path, paths: &[String]) -> Result<GitStatus, CommandError>
 
 // ── Partial staging ───────────────────────────────────────────────────────────
 
-/// Collect hunks for `path` from the given `diff`, pairing each hunk with its
-/// lines, and return the one at `hunk_index`.
-fn extract_hunk(
-    diff: &Diff<'_>,
-    hunk_index: usize,
-) -> Result<(git2::DiffHunk<'static>, Vec<git2::DiffLine<'static>>), CommandError> {
+struct HunkData {
+    old_start: u32,
+    new_start: u32,
+    lines: Vec<(char, String)>,
+}
+
+fn collect_hunks(diff: &Diff<'_>) -> Result<Vec<HunkData>, CommandError> {
+    // `foreach` borrows every closure at once, so they can't share a `&mut Vec`.
+    // Record line origins keyed by hunk index, then assemble after the walk.
     use std::cell::Cell;
 
-    let target = Cell::new(usize::MAX);
-    let mut hunks: Vec<(git2::DiffHunk<'static>, Vec<git2::DiffLine<'static>>)> = Vec::new();
+    let cur = Cell::new(usize::MAX);
+    let mut starts: Vec<(u32, u32)> = Vec::new();
+    let mut flat_lines: Vec<(usize, char, String)> = Vec::new();
 
     diff.foreach(
         &mut |_, _| true,
         None,
         Some(&mut |_, hunk| {
-            let idx = hunks.len();
-            // SAFETY: git2's DiffHunk is valid for the lifetime of the diff.
-            // We clone the underlying data via the owned representation.
-            let owned: git2::DiffHunk<'static> = unsafe { std::mem::transmute(hunk.clone()) };
-            hunks.push((owned, Vec::new()));
-            target.set(idx);
+            cur.set(starts.len());
+            starts.push((hunk.old_start(), hunk.new_start()));
             true
         }),
         Some(&mut |_, _, line| {
-            let idx = target.get();
+            let idx = cur.get();
             if idx != usize::MAX {
-                let owned: git2::DiffLine<'static> = unsafe { std::mem::transmute(line.clone()) };
-                hunks[idx].1.push(owned);
+                flat_lines.push((
+                    idx,
+                    line.origin(),
+                    String::from_utf8_lossy(line.content()).into_owned(),
+                ));
             }
             true
         }),
     )?;
 
-    hunks
+    let mut hunks: Vec<HunkData> = starts
+        .into_iter()
+        .map(|(old_start, new_start)| HunkData {
+            old_start,
+            new_start,
+            lines: Vec::new(),
+        })
+        .collect();
+
+    for (idx, origin, content) in flat_lines {
+        hunks[idx].lines.push((origin, content));
+    }
+
+    Ok(hunks)
+}
+
+fn extract_hunk(diff: &Diff<'_>, hunk_index: usize) -> Result<HunkData, CommandError> {
+    collect_hunks(diff)?
         .into_iter()
         .nth(hunk_index)
         .ok_or_else(|| CommandError::Git(format!("hunk index {hunk_index} out of range")))
 }
 
-/// Build a minimal unified-diff patch string from a subset of lines within a
-/// hunk.  `selected` is the index set into `all_lines`; pass `None` to include
-/// every line (whole-hunk staging).  `reverse` swaps +/- so the patch undoes
-/// the change (used for unstaging).
-fn build_patch(
-    path: &str,
-    hunk: &git2::DiffHunk<'_>,
-    all_lines: &[git2::DiffLine<'_>],
-    selected: Option<&[usize]>,
-    reverse: bool,
-) -> String {
-    // Count additions and deletions in the selected subset so we can write a
-    // correct @@ header.
+/// Build a minimal unified-diff patch string.
+/// `selected` restricts which line indices are staged; unselected diff lines
+/// are demoted to context so the surrounding file state is preserved.
+/// `reverse` swaps +/- to produce an undo patch (for unstaging).
+fn build_patch(path: &str, hunk: &HunkData, selected: Option<&[usize]>, reverse: bool) -> String {
     let mut adds: u32 = 0;
     let mut dels: u32 = 0;
     let mut body = String::new();
 
-    for (i, line) in all_lines.iter().enumerate() {
-        if let Some(sel) = selected {
-            if !sel.contains(&i) {
-                // Excluded diff lines become context lines.
-                match line.origin() {
-                    '+' | '-' => {
-                        // Turn into context; use whichever side has the content.
-                        let content = std::str::from_utf8(line.content()).unwrap_or("");
-                        body.push(' ');
-                        body.push_str(content);
-                        adds += 1;
-                        dels += 1;
-                        continue;
-                    }
-                    _ => {}
-                }
-            }
-        }
+    for (i, (origin, content)) in hunk.lines.iter().enumerate() {
+        let effective =
+            if selected.is_some_and(|sel| !sel.contains(&i) && matches!(origin, '+' | '-')) {
+                ' '
+            } else {
+                *origin
+            };
 
-        match line.origin() {
+        match effective {
             '+' => {
                 if reverse {
                     body.push('-');
@@ -434,32 +435,35 @@ fn build_patch(
                     dels += 1;
                 }
             }
-            ' ' => {
+            _ => {
                 body.push(' ');
                 adds += 1;
                 dels += 1;
             }
-            _ => continue,
         }
-        let content = std::str::from_utf8(line.content()).unwrap_or("");
         body.push_str(content);
     }
 
-    // For a forward patch: old side = index (has dels + context), new = workdir (has adds + context).
-    // For a reverse patch: we swap the sides so libgit2 applies it as an undo.
+    // old_count = context + deletions; new_count = context + additions.
+    // Reverse swaps the sides so libgit2 applies the undo to the index.
     let (old_start, old_count, new_start, new_count) = if reverse {
-        (hunk.new_start(), adds, hunk.old_start(), dels)
+        (hunk.new_start, adds, hunk.old_start, dels)
     } else {
-        (hunk.old_start(), dels, hunk.new_start(), adds)
+        (hunk.old_start, dels, hunk.new_start, adds)
     };
 
     if !body.ends_with('\n') {
         body.push('\n');
     }
 
-    format!(
-        "--- a/{path}\n+++ b/{path}\n@@ -{old_start},{old_count} +{new_start},{new_count} @@\n{body}",
-    )
+    format!("--- a/{path}\n+++ b/{path}\n@@ -{old_start},{old_count} +{new_start},{new_count} @@\n{body}")
+}
+
+fn apply_patch(repo: &Repository, patch: &str) -> Result<(), CommandError> {
+    let d = Diff::from_buffer(patch.as_bytes())
+        .map_err(|e| CommandError::Git(e.message().to_owned()))?;
+    repo.apply(&d, ApplyLocation::Index, None)?;
+    Ok(())
 }
 
 fn unstaged_diff_for_path<'repo>(
@@ -491,23 +495,15 @@ fn staged_diff_for_path<'repo>(
 
 pub fn stage_hunk(root: &Path, path: &str, hunk_index: usize) -> Result<GitStatus, CommandError> {
     let repo = open(root)?;
-    let d = unstaged_diff_for_path(&repo, path)?;
-    let (hunk, lines) = extract_hunk(&d, hunk_index)?;
-    let patch = build_patch(path, &hunk, &lines, None, false);
-    let patch_diff = Diff::from_buffer(patch.as_bytes())
-        .map_err(|e| CommandError::Git(e.message().to_owned()))?;
-    repo.apply(&patch_diff, ApplyLocation::Index, None)?;
+    let hunk = extract_hunk(&unstaged_diff_for_path(&repo, path)?, hunk_index)?;
+    apply_patch(&repo, &build_patch(path, &hunk, None, false))?;
     compute_status(&repo)
 }
 
 pub fn unstage_hunk(root: &Path, path: &str, hunk_index: usize) -> Result<GitStatus, CommandError> {
     let repo = open(root)?;
-    let d = staged_diff_for_path(&repo, path)?;
-    let (hunk, lines) = extract_hunk(&d, hunk_index)?;
-    let patch = build_patch(path, &hunk, &lines, None, true);
-    let patch_diff = Diff::from_buffer(patch.as_bytes())
-        .map_err(|e| CommandError::Git(e.message().to_owned()))?;
-    repo.apply(&patch_diff, ApplyLocation::Index, None)?;
+    let hunk = extract_hunk(&staged_diff_for_path(&repo, path)?, hunk_index)?;
+    apply_patch(&repo, &build_patch(path, &hunk, None, true))?;
     compute_status(&repo)
 }
 
@@ -518,12 +514,8 @@ pub fn stage_lines(
     line_indices: &[usize],
 ) -> Result<GitStatus, CommandError> {
     let repo = open(root)?;
-    let d = unstaged_diff_for_path(&repo, path)?;
-    let (hunk, lines) = extract_hunk(&d, hunk_index)?;
-    let patch = build_patch(path, &hunk, &lines, Some(line_indices), false);
-    let patch_diff = Diff::from_buffer(patch.as_bytes())
-        .map_err(|e| CommandError::Git(e.message().to_owned()))?;
-    repo.apply(&patch_diff, ApplyLocation::Index, None)?;
+    let hunk = extract_hunk(&unstaged_diff_for_path(&repo, path)?, hunk_index)?;
+    apply_patch(&repo, &build_patch(path, &hunk, Some(line_indices), false))?;
     compute_status(&repo)
 }
 
@@ -534,12 +526,8 @@ pub fn unstage_lines(
     line_indices: &[usize],
 ) -> Result<GitStatus, CommandError> {
     let repo = open(root)?;
-    let d = staged_diff_for_path(&repo, path)?;
-    let (hunk, lines) = extract_hunk(&d, hunk_index)?;
-    let patch = build_patch(path, &hunk, &lines, Some(line_indices), true);
-    let patch_diff = Diff::from_buffer(patch.as_bytes())
-        .map_err(|e| CommandError::Git(e.message().to_owned()))?;
-    repo.apply(&patch_diff, ApplyLocation::Index, None)?;
+    let hunk = extract_hunk(&staged_diff_for_path(&repo, path)?, hunk_index)?;
+    apply_patch(&repo, &build_patch(path, &hunk, Some(line_indices), true))?;
     compute_status(&repo)
 }
 

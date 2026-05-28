@@ -1,10 +1,12 @@
 mod agent;
+mod assets;
 mod commands;
 mod db;
 mod error;
 mod git;
 mod lsp;
 mod pty;
+mod sessions;
 mod state;
 mod watcher;
 
@@ -65,6 +67,8 @@ pub fn run() {
             commands::lsp_send,
             commands::lsp_stop,
             commands::lsp_status,
+            sessions::list_sessions,
+            assets::list_claude_assets,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Cantus");

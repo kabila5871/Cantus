@@ -140,11 +140,37 @@ export const listenFsChanged = (
   cb: (change: FsChange) => void,
 ): Promise<UnlistenFn> => listen<FsChange>("fs://changed", (e) => cb(e.payload));
 
+export interface SessionMeta {
+  id: string;
+  title: string;
+  updated_at: number; // epoch milliseconds
+  git_branch: string | null;
+  message_count: number;
+}
+
+export interface AssetItem {
+  name: string;
+  description: string;
+  scope: "user" | "project";
+  path: string;
+}
+
+export interface ClaudeAssets {
+  skills: AssetItem[];
+  agents: AssetItem[];
+  workflows: AssetItem[];
+}
+
 export const ptySpawn = (
   cols: number,
   rows: number,
   program?: string,
-): Promise<SpawnedTerminal> => invoke("pty_spawn", { cols, rows, program });
+  args?: string[],
+): Promise<SpawnedTerminal> => invoke("pty_spawn", { cols, rows, program, args });
+
+export const listSessions = (): Promise<SessionMeta[]> => invoke("list_sessions");
+
+export const listClaudeAssets = (): Promise<ClaudeAssets> => invoke("list_claude_assets");
 
 export const ptyWrite = (id: number, data: string): Promise<void> =>
   invoke("pty_write", { id, data });
