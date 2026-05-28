@@ -1,0 +1,24 @@
+<svg width="1200" height="320" viewBox="0 0 1200 320" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cantus — a Claude-first coding environment">
+  <defs>
+    <linearGradient id="bnTile" x1="120" y1="70" x2="300" y2="250" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E89070"/>
+      <stop offset="1" stop-color="#C0562F"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="320" rx="28" fill="#FAF6EF"/>
+
+  <!-- icon tile -->
+  <g transform="translate(120 70)">
+    <rect width="180" height="180" rx="40" fill="url(#bnTile)"/>
+    <g transform="scale(0.3515625)" fill="none" stroke="#FBF6EE" stroke-linecap="round">
+      <circle cx="256" cy="256" r="150" stroke-width="30" stroke-dasharray="659.73 282.74" stroke-dashoffset="-141.37"/>
+      <circle cx="256" cy="256" r="104" stroke-width="28" stroke-dasharray="457.42 196.04" stroke-dashoffset="-98.02"/>
+      <circle cx="256" cy="256" r="58" stroke-width="26" stroke-dasharray="255.10 109.33" stroke-dashoffset="-54.66"/>
+    </g>
+    <circle cx="90" cy="90" r="7.7" fill="#FBF6EE"/>
+  </g>
+
+  <!-- wordmark -->
+  <text x="350" y="172" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="700" font-size="108" fill="#B8512B" letter-spacing="-2">Cantus</text>
+  <text x="354" y="222" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="500" font-size="30" fill="#8A6F5E">A Claude-first coding environment</text>
+</svg>

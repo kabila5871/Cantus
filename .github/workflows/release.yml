@@ -1,0 +1,42 @@
+name: Release
+
+# Tag a version to build installers and open a draft GitHub Release:
+#   git tag v0.1.0 && git push origin v0.1.0
+# Builds are unsigned until Apple signing secrets (APPLE_CERTIFICATE, etc.) are added.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Cantus ${{ github.ref_name }}
+          releaseBody: Download the .dmg below to install Cantus.
+          releaseDraft: true
+          prerelease: false
+          args: --target aarch64-apple-darwin
