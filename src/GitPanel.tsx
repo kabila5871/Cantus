@@ -8,6 +8,13 @@ import {
   type GitStatus,
   type CommandError,
 } from "./ipc";
+import {
+  gitBranches,
+  gitCheckout,
+  gitCreateBranch,
+  gitDiscard,
+  type Branch,
+} from "./ipc";
 import { useStore } from "./store";
 
 const CHANGE_LABEL: Record<string, string> = {
@@ -23,11 +30,13 @@ function FileRow({
   entry,
   side,
   onAction,
+  onDiscard,
   onDiff,
 }: {
   entry: GitFileStatus;
   side: "staged" | "unstaged";
   onAction: (paths: string[]) => Promise<void>;
+  onDiscard?: (path: string) => Promise<void>;
   onDiff: (path: string) => void;
 }) {
   const change = side === "staged" ? entry.staged! : entry.unstaged!;
@@ -38,6 +47,18 @@ function FileRow({
     <div className="git-row" onClick={() => onDiff(entry.path)} title={entry.path}>
       <span className={`git-badge git-badge--${change}`}>{label}</span>
       <span className="git-row__name">{name}</span>
+      {onDiscard && (
+        <button
+          className="git-row__action git-row__action--discard"
+          title="Discard changes"
+          onClick={(e) => {
+            e.stopPropagation();
+            void onDiscard(entry.path);
+          }}
+        >
+          ↺
+        </button>
+      )}
       <button
         className="git-row__action"
         title={side === "staged" ? "Unstage" : "Stage"}
@@ -48,6 +69,143 @@ function FileRow({
       >
         {side === "staged" ? "−" : "+"}
       </button>
+    </div>
+  );
+}
+
+function BranchSwitcher({
+  currentBranch,
+  onSwitch,
+}: {
+  currentBranch: string | null;
+  onSwitch: (name: string, isNew: boolean) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [newName, setNewName] = useState("");
+  const [creatingNew, setCreatingNew] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const newInputRef = useRef<HTMLInputElement>(null);
+
+  const openDropdown = async () => {
+    setLoading(true);
+    try {
+      const list = await gitBranches();
+      setBranches(list.filter((b) => !b.is_remote));
+      setOpen(true);
+    } catch {
+      // silently skip; branch switcher is non-critical
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Close on outside click or Escape.
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setCreatingNew(false);
+        setNewName("");
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        setCreatingNew(false);
+        setNewName("");
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [open]);
+
+  // Auto-focus the new-branch input when it appears.
+  useEffect(() => {
+    if (creatingNew) newInputRef.current?.focus();
+  }, [creatingNew]);
+
+  const handleSelect = async (name: string) => {
+    setOpen(false);
+    setCreatingNew(false);
+    setNewName("");
+    await onSwitch(name, false);
+  };
+
+  const handleCreate = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    setOpen(false);
+    setCreatingNew(false);
+    setNewName("");
+    await onSwitch(name, true);
+  };
+
+  return (
+    <div className="branch-switcher" ref={dropdownRef}>
+      <button
+        className="git-panel__branch git-panel__branch--btn"
+        onClick={() => (open ? setOpen(false) : void openDropdown())}
+        title="Switch branch"
+        disabled={loading}
+      >
+        {currentBranch ?? "detached HEAD"}
+        <span className="branch-switcher__chevron">{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && (
+        <div className="branch-switcher__dropdown">
+          {branches.map((b) => (
+            <button
+              key={b.name}
+              className={`branch-switcher__item${b.is_current ? " branch-switcher__item--current" : ""}`}
+              onClick={() => void handleSelect(b.name)}
+            >
+              {b.is_current && <span className="branch-switcher__check">✓</span>}
+              {b.name}
+            </button>
+          ))}
+
+          {creatingNew ? (
+            <div className="branch-switcher__new-row">
+              <input
+                ref={newInputRef}
+                className="branch-switcher__new-input"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleCreate();
+                  if (e.key === "Escape") {
+                    setCreatingNew(false);
+                    setNewName("");
+                  }
+                }}
+                placeholder="branch name"
+              />
+              <button
+                className="branch-switcher__new-confirm"
+                onClick={() => void handleCreate()}
+                disabled={!newName.trim()}
+              >
+                Create
+              </button>
+            </div>
+          ) : (
+            <button
+              className="branch-switcher__item branch-switcher__item--new"
+              onClick={() => setCreatingNew(true)}
+            >
+              + new branch
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -96,6 +254,16 @@ export function GitPanel() {
     }
   };
 
+  const handleDiscard = async (path: string) => {
+    if (!confirm(`Discard changes to ${path.split("/").at(-1)}?`)) return;
+    try {
+      store.setGitStatus(await gitDiscard([path]));
+      setError(null);
+    } catch (e) {
+      setError((e as CommandError).message);
+    }
+  };
+
   const handleCommit = async () => {
     if (!commitMsg.trim()) return;
     setCommitting(true);
@@ -107,6 +275,18 @@ export function GitPanel() {
       setError((e as CommandError).message);
     } finally {
       setCommitting(false);
+    }
+  };
+
+  const handleBranchSwitch = async (name: string, isNew: boolean) => {
+    try {
+      const result = isNew
+        ? await gitCreateBranch(name)
+        : await gitCheckout(name);
+      store.setGitStatus(result);
+      setError(null);
+    } catch (e) {
+      setError((e as CommandError).message);
     }
   };
 
@@ -134,9 +314,10 @@ export function GitPanel() {
   return (
     <div className="git-panel">
       <div className="git-panel__header">
-        <span className="git-panel__branch">
-          {status?.branch ?? "detached HEAD"}
-        </span>
+        <BranchSwitcher
+          currentBranch={status?.branch ?? null}
+          onSwitch={handleBranchSwitch}
+        />
         {status && (status.ahead > 0 || status.behind > 0) && (
           <span className="git-panel__sync">
             {status.ahead > 0 && `↑${status.ahead}`}
@@ -190,6 +371,7 @@ export function GitPanel() {
                 entry={entry}
                 side="unstaged"
                 onAction={handleStage}
+                onDiscard={handleDiscard}
                 onDiff={store.openDiff}
               />
             ))}

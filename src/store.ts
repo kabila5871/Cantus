@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { Project, DirEntry, GitStatus, AgentStatus, Selection, RecentEdit, EditorContext } from "./ipc";
+import type { Project, DirEntry, GitStatus, AgentStatus, LspStatus, Selection, RecentEdit, EditorContext, ChatHistory } from "./ipc";
 
 export type { EditorContext };
 
@@ -34,7 +34,9 @@ export interface AppStore {
   openBuffer: (path: string, content: string, hash: string) => void;
   setActiveBuffer: (path: string) => void;
   closeBuffer: (path: string) => void;
-  markDirty: (path: string) => void;
+  // Mirror the editor's live content into the buffer on each keystroke so Save
+  // (palette / keybinding) writes what the user sees, not the on-open snapshot.
+  updateBuffer: (path: string, content: string) => void;
   reconcileBuffer: (path: string, hash: string) => void;
   flagExternalChange: (path: string) => void;
 
@@ -51,12 +53,13 @@ export interface AppStore {
   agentStatus: AgentStatus;
   setAgentStatus: (s: AgentStatus) => void;
 
-  // Chat messages accumulated from agent://event.
+  // Chat messages accumulated from agent://event and hydrated from persisted history.
   chatMessages: ChatMessage[];
   appendChatDelta: (runId: number, text: string) => void;
   finalizeChatMessage: (runId: number, role: string, text: string) => void;
   addChatActivity: (runId: number, line: string) => void;
   addChatError: (runId: number, message: string) => void;
+  hydrateHistory: (history: ChatHistory) => void;
 
   // Live editor context for the agent (debounced selection + recent edits).
   activeSelection: Selection | null;
@@ -69,6 +72,14 @@ export interface AppStore {
   pendingEdit: ProposeEdit | null;
   setPendingEdit: (edit: ProposeEdit) => void;
   clearPendingEdit: () => void;
+
+  // LSP lifecycle mirror.
+  lspStatus: LspStatus;
+  setLspStatus: (s: LspStatus) => void;
+
+  // Which pane is keyboard-focused.
+  focusedPane: PaneId;
+  focusPane: (pane: PaneId) => void;
 }
 
 export interface ProposeEdit {
@@ -77,6 +88,8 @@ export interface ProposeEdit {
   path: string;
   new_content: string;
 }
+
+export type PaneId = "explorer" | "editor" | "terminal" | "chat";
 
 export type ChatMessageKind = "assistant" | "user" | "activity" | "error";
 

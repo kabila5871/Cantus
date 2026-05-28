@@ -10,8 +10,22 @@ export interface CommandError {
     | "db"
     | "pty"
     | "git"
-    | "agent";
+    | "agent"
+    | "lsp";
   message: string;
+}
+
+export type LspLanguage = "python";
+
+export interface LspStatus {
+  state: "running" | "stopped";
+  language: LspLanguage | null;
+  generation: number;
+}
+
+export interface LspMessage {
+  generation: number;
+  payload: string;
 }
 
 export type GitChange =
@@ -126,8 +140,11 @@ export const listenFsChanged = (
   cb: (change: FsChange) => void,
 ): Promise<UnlistenFn> => listen<FsChange>("fs://changed", (e) => cb(e.payload));
 
-export const ptySpawn = (cols: number, rows: number): Promise<SpawnedTerminal> =>
-  invoke("pty_spawn", { cols, rows });
+export const ptySpawn = (
+  cols: number,
+  rows: number,
+  program?: string,
+): Promise<SpawnedTerminal> => invoke("pty_spawn", { cols, rows, program });
 
 export const ptyWrite = (id: number, data: string): Promise<void> =>
   invoke("pty_write", { id, data });
@@ -159,6 +176,17 @@ export const gitCommit = (message: string): Promise<GitStatus> =>
 export const gitDiff = (path: string): Promise<GitDiff> =>
   invoke("git_diff", { path });
 
+export interface Branch { name: string; is_current: boolean; is_remote: boolean }
+export const gitBranches = (): Promise<Branch[]> => invoke("git_branches");
+export const gitCheckout = (name: string): Promise<GitStatus> => invoke("git_checkout", { name });
+export const gitCreateBranch = (name: string): Promise<GitStatus> => invoke("git_create_branch", { name });
+export const gitDiscard = (paths: string[]): Promise<GitStatus> => invoke("git_discard", { paths });
+
+export const gitStageHunk = (path: string, hunkIndex: number): Promise<GitStatus> => invoke("git_stage_hunk", { path, hunkIndex });
+export const gitUnstageHunk = (path: string, hunkIndex: number): Promise<GitStatus> => invoke("git_unstage_hunk", { path, hunkIndex });
+export const gitStageLines = (path: string, hunkIndex: number, lineIndices: number[]): Promise<GitStatus> => invoke("git_stage_lines", { path, hunkIndex, lineIndices });
+export const gitUnstageLines = (path: string, hunkIndex: number, lineIndices: number[]): Promise<GitStatus> => invoke("git_unstage_lines", { path, hunkIndex, lineIndices });
+
 // ── Agent seam ────────────────────────────────────────────────────────────────
 
 export interface Selection {
@@ -183,6 +211,24 @@ export interface EditorContext {
 export interface AgentStatus {
   state: "running" | "stopped";
   project_id: number | null;
+  session_id: string | null;
+}
+
+export interface HistoryMessage {
+  role: string;
+  content: string;
+  created_at: string;
+}
+
+export interface SessionSummary {
+  session_id: string;
+  summary: string;
+  created_at: string;
+}
+
+export interface ChatHistory {
+  messages: HistoryMessage[];
+  summaries: SessionSummary[];
 }
 
 export type AgentEvent =
@@ -193,6 +239,8 @@ export type AgentEvent =
   | { event: "error"; run_id: number; message: string }
   | { event: "status"; state: "running" | "stopped" }
   | { event: "propose_edit"; run_id: number; edit_id: number; path: string; new_content: string };
+
+export const loadHistory = (): Promise<ChatHistory> => invoke("load_history");
 
 export const agentStart = (): Promise<AgentStatus> => invoke("agent_start");
 
@@ -212,3 +260,20 @@ export const listenAgentEvent = (
   cb: (e: AgentEvent) => void,
 ): Promise<UnlistenFn> =>
   listen<AgentEvent>("agent://event", (e) => cb(e.payload));
+
+// ── LSP seam ─────────────────────────────────────────────────────────────────
+
+export const lspStart = (language: LspLanguage): Promise<LspStatus> =>
+  invoke("lsp_start", { language });
+
+export const lspSend = (payload: string): Promise<void> =>
+  invoke("lsp_send", { payload });
+
+export const lspStop = (): Promise<LspStatus> => invoke("lsp_stop");
+
+export const lspStatus = (): Promise<LspStatus> => invoke("lsp_status");
+
+export const listenLspMessage = (
+  cb: (m: LspMessage) => void,
+): Promise<UnlistenFn> =>
+  listen<LspMessage>("lsp-message", (e) => cb(e.payload));

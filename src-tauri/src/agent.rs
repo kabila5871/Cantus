@@ -14,6 +14,7 @@ use tauri::{AppHandle, Emitter, Manager};
 pub struct AgentStatus {
     pub state: AgentLifecycle,
     pub project_id: Option<i64>,
+    pub session_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
@@ -110,14 +111,17 @@ pub struct AgentProcess {
     /// it, so a stale thread can never clobber a newer process.
     pub generation: u32,
     pub project_id: i64,
+    pub session_id: String,
 }
 
 // ── Host-script message shapes (SDK output on stdout) ────────────────────────
 
 /// The host emits `{ run_id, type, ...rest }` for every SDK message.
 /// `run_id` is the host's monotonic counter, incremented per prompt.
+/// For internal host messages (e.g. session_summary) run_id may be absent.
 #[derive(Deserialize)]
 struct HostMessage {
+    #[serde(default)]
     run_id: u32,
     #[serde(rename = "type")]
     kind: String,
@@ -196,6 +200,7 @@ fn normalize(line: &str) -> Option<AgentEvent> {
                 new_content,
             })
         }
+        // session_summary is consumed by the reader for persistence — not forwarded.
         // system, permission_denied, task_progress, hook_* — informational, not wired in M4.
         _ => None,
     }
@@ -221,6 +226,28 @@ fn extract_content_text(content: &Value) -> Option<String> {
     }
 }
 
+fn now_iso() -> String {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        .to_string()
+}
+
+fn mint_session_id() -> String {
+    // Epoch-seconds + generation counter gives a monotonic, unique-enough id
+    // without pulling in a uuid crate.
+    static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!(
+        "{}-{seq}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+    )
+}
+
 // ── Broker functions (called by command handlers) ─────────────────────────────
 
 pub fn start(
@@ -237,14 +264,15 @@ pub fn start(
             return Ok(AgentStatus {
                 state: AgentLifecycle::Running,
                 project_id: Some(project_id),
+                session_id: Some(p.session_id.clone()),
             });
         }
         // Different project — tear down before spawning for the new one.
-        stop_inner(&mut guard);
+        wind_down(guard.take().unwrap());
     }
 
-    let host_script = locate_host_script()?;
-    let node = which_node()?;
+    let host_script = locate_host_script(&app)?;
+    let node = locate_node(&app)?;
 
     let mut child = Command::new(&node)
         .arg(&host_script)
@@ -255,7 +283,7 @@ pub fn start(
         .spawn()
         .map_err(|e| CommandError::Agent(format!("spawn failed: {e}")))?;
 
-    let stdin = child
+    let mut stdin = child
         .stdin
         .take()
         .ok_or_else(|| CommandError::Agent("failed to open stdin".into()))?;
@@ -267,23 +295,71 @@ pub fn start(
     let generation = state
         .agent_generation
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let session_id = mint_session_id();
+
+    // Load seed: latest summary + last 20 messages for this project.
+    let seed = tauri::async_runtime::block_on(load_seed(&state.db, project_id))
+        .map_err(|e| CommandError::Db(e.to_string()))?;
+
+    if let Some((summary, recent)) = seed {
+        let seed_line = serde_json::json!({
+            "type": "seed",
+            "summary": summary,
+            "recent": recent,
+        });
+        let mut buf = serde_json::to_vec(&seed_line).unwrap();
+        buf.push(b'\n');
+        stdin
+            .write_all(&buf)
+            .map_err(|e| CommandError::Agent(format!("seed write failed: {e}")))?;
+    }
 
     *guard = Some(AgentProcess {
         child,
         stdin,
         generation,
         project_id,
+        session_id: session_id.clone(),
     });
 
-    // Reader thread: parse LDJSON from the host, normalize, emit AgentEvents.
-    // run_id is owned by the host (incremented per prompt); we pass it through.
+    // Reader thread: parse LDJSON from the host, normalize, emit AgentEvents,
+    // and persist Message/Tool/Result rows to SQLite as a side effect.
     let app_thread = app.clone();
+    let session_id_thread = session_id.clone();
     std::thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines() {
             match line {
                 Ok(l) if !l.is_empty() => {
+                    // Check for session_summary before normalize() so we can
+                    // persist it without forwarding it to the frontend.
+                    if let Ok(v) = serde_json::from_str::<Value>(&l) {
+                        if v.get("type").and_then(Value::as_str) == Some("session_summary") {
+                            if let Some(summary) = v["summary"].as_str() {
+                                let db = app_thread.state::<AppState>().db.clone();
+                                let summary = summary.to_owned();
+                                let sid = session_id_thread.clone();
+                                let ts = now_iso();
+                                tauri::async_runtime::block_on(async move {
+                                    let _ = sqlx::query(
+                                        "INSERT INTO session_summaries \
+                                         (project_id, session_id, summary, created_at) \
+                                         VALUES (?1, ?2, ?3, ?4)",
+                                    )
+                                    .bind(project_id)
+                                    .bind(&sid)
+                                    .bind(&summary)
+                                    .bind(&ts)
+                                    .execute(&db)
+                                    .await;
+                                });
+                            }
+                            continue;
+                        }
+                    }
+
                     if let Some(event) = normalize(&l) {
+                        persist_event(&app_thread, project_id, &session_id_thread, &event);
                         let _ = app_thread.emit("agent://event", event);
                     }
                 }
@@ -315,7 +391,111 @@ pub fn start(
     Ok(AgentStatus {
         state: AgentLifecycle::Running,
         project_id: Some(project_id),
+        session_id: Some(session_id),
     })
+}
+
+/// Persist a normalized AgentEvent to SQLite on the reader thread.
+/// Runs synchronously via block_on — acceptable because this is a dedicated
+/// std::thread, not the async Tokio runtime thread.
+fn persist_event(app: &AppHandle, project_id: i64, session_id: &str, event: &AgentEvent) {
+    let db = app.state::<AppState>().db.clone();
+    let ts = now_iso();
+    match event {
+        AgentEvent::Message { role, text, .. } => {
+            let role = role.clone();
+            let text = text.clone();
+            let sid = session_id.to_owned();
+            tauri::async_runtime::block_on(async move {
+                let _ = sqlx::query(
+                    "INSERT INTO messages (project_id, session_id, role, content, created_at) \
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                )
+                .bind(project_id)
+                .bind(&sid)
+                .bind(&role)
+                .bind(&text)
+                .bind(&ts)
+                .execute(&db)
+                .await;
+            });
+        }
+        AgentEvent::Tool { name, input, .. } => {
+            let content = serde_json::json!({ "name": name, "input": input }).to_string();
+            tauri::async_runtime::block_on(async move {
+                let _ = sqlx::query(
+                    "INSERT INTO agent_events \
+                     (project_id, agent_id, task_id, kind, content, created_at) \
+                     VALUES (?1, 'default', NULL, 'tool_use', ?2, ?3)",
+                )
+                .bind(project_id)
+                .bind(&content)
+                .bind(&ts)
+                .execute(&db)
+                .await;
+            });
+        }
+        AgentEvent::Result {
+            subtype,
+            total_cost_usd,
+            num_turns,
+            ..
+        } => {
+            let content = serde_json::json!({
+                "subtype": subtype,
+                "total_cost_usd": total_cost_usd,
+                "num_turns": num_turns,
+            })
+            .to_string();
+            tauri::async_runtime::block_on(async move {
+                let _ = sqlx::query(
+                    "INSERT INTO agent_events \
+                     (project_id, agent_id, task_id, kind, content, created_at) \
+                     VALUES (?1, 'default', NULL, 'result', ?2, ?3)",
+                )
+                .bind(project_id)
+                .bind(&content)
+                .bind(&ts)
+                .execute(&db)
+                .await;
+            });
+        }
+        _ => {}
+    }
+}
+
+async fn load_seed(
+    db: &sqlx::SqlitePool,
+    project_id: i64,
+) -> Result<Option<(String, Vec<serde_json::Value>)>, sqlx::Error> {
+    let summary: Option<String> = sqlx::query_scalar(
+        "SELECT summary FROM session_summaries \
+         WHERE project_id = ?1 ORDER BY created_at DESC, id DESC LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_optional(db)
+    .await?;
+
+    // Pull the 20 newest, then restore chronological order for the seed.
+    let mut rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT role, content FROM messages \
+         WHERE project_id = ?1 ORDER BY created_at DESC, id DESC LIMIT 20",
+    )
+    .bind(project_id)
+    .fetch_all(db)
+    .await?;
+    rows.reverse();
+
+    if summary.is_none() && rows.is_empty() {
+        return Ok(None);
+    }
+
+    let recent: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|(role, content)| serde_json::json!({ "role": role, "content": content }))
+        .collect();
+
+    Ok(Some((summary.unwrap_or_default(), recent)))
 }
 
 pub fn send(
@@ -356,11 +536,14 @@ fn write_stdin(
 }
 
 pub fn stop(agent: &Mutex<Option<AgentProcess>>) -> Result<AgentStatus, CommandError> {
-    let mut guard = agent.lock().unwrap();
-    stop_inner(&mut guard);
+    let proc = agent.lock().unwrap().take();
+    if let Some(proc) = proc {
+        wind_down(proc);
+    }
     Ok(AgentStatus {
         state: AgentLifecycle::Stopped,
         project_id: None,
+        session_id: None,
     })
 }
 
@@ -370,30 +553,104 @@ pub fn status(agent: &Mutex<Option<AgentProcess>>) -> AgentStatus {
         Some(p) => AgentStatus {
             state: AgentLifecycle::Running,
             project_id: Some(p.project_id),
+            session_id: Some(p.session_id.clone()),
         },
         None => AgentStatus {
             state: AgentLifecycle::Stopped,
             project_id: None,
+            session_id: None,
         },
     }
 }
 
-/// Close stdin and kill the child. Called while holding the guard.
-fn stop_inner(guard: &mut std::sync::MutexGuard<'_, Option<AgentProcess>>) {
-    if let Some(mut proc) = guard.take() {
-        // Closing stdin signals the host's readline to emit 'close', letting it
-        // drain in-flight promises before we kill.
+/// Ask the host to emit a final session_summary, then tear it down off the
+/// caller's thread. Ownership of `proc` is moved here, so the agent mutex is
+/// already released — this never blocks an async command or the Tokio runtime.
+///
+/// On receiving `summarize` the host emits the summary (persisted by the reader
+/// thread) and exits, closing its stdout so the reader self-cleans and emits
+/// `Stopped`. The detached thread waits for that exit, force-killing after a
+/// grace period if the host hangs.
+fn wind_down(mut proc: AgentProcess) {
+    std::thread::spawn(move || {
+        let _ = proc.stdin.write_all(b"{\"type\":\"summarize\"}\n");
         drop(proc.stdin);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(2000);
+        loop {
+            match proc.child.try_wait() {
+                Ok(Some(_)) => return,
+                Ok(None) if std::time::Instant::now() >= deadline => break,
+                Ok(None) => std::thread::sleep(std::time::Duration::from_millis(50)),
+                Err(_) => break,
+            }
+        }
         let _ = proc.child.kill();
         let _ = proc.child.wait();
-    }
+    });
 }
 
 // ── Path resolution ───────────────────────────────────────────────────────────
 
-/// Find agent-host/index.mjs by walking up from the running binary.
-/// In the signed bundle (M8), the resource_dir path takes precedence.
-fn locate_host_script() -> Result<std::path::PathBuf, CommandError> {
+/// Resolve the bundled Node sidecar path.
+///
+/// In the signed .app bundle Tauri places the sidecar next to the main
+/// executable (`Contents/MacOS/node`). During `tauri dev` the sidecar is not
+/// present, so we fall back to the system node found on PATH — development
+/// machines are expected to have it.
+fn locate_node(app: &AppHandle) -> Result<std::path::PathBuf, CommandError> {
+    use tauri::Manager;
+    // Bundle: sidecar lives in the same dir as the main exe.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(bin_dir) = exe.parent() {
+            let bundled = bin_dir.join("node");
+            if bundled.exists() {
+                return Ok(bundled);
+            }
+        }
+    }
+    // tauri dev: try resource_dir parent chain then common install paths.
+    if let Ok(res) = app.path().resource_dir() {
+        let candidate = res.join("node");
+        if candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+    for path in [
+        "/opt/homebrew/bin/node",
+        "/usr/local/bin/node",
+        "/usr/bin/node",
+    ] {
+        let p = std::path::Path::new(path);
+        if p.exists() {
+            return Ok(p.to_path_buf());
+        }
+    }
+    if let Ok(out) = Command::new("which").arg("node").output() {
+        if out.status.success() {
+            let s = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+            if !s.is_empty() {
+                return Ok(std::path::PathBuf::from(s));
+            }
+        }
+    }
+    Err(CommandError::Agent("node runtime not found".into()))
+}
+
+/// Resolve the agent-host entry point.
+///
+/// In the signed .app bundle it lives in `Contents/Resources/agent-host/index.mjs`
+/// (placed there by the `resources` bundle config). During `tauri dev` we walk up
+/// from the executable until we find the source-tree copy.
+fn locate_host_script(app: &AppHandle) -> Result<std::path::PathBuf, CommandError> {
+    use tauri::Manager;
+    // Bundle: resources dir contains agent-host/.
+    if let Ok(res) = app.path().resource_dir() {
+        let bundled = res.join("agent-host").join("index.mjs");
+        if bundled.exists() {
+            return Ok(bundled);
+        }
+    }
+    // tauri dev: walk up from the exe to find the workspace copy.
     let mut dir = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()));
@@ -402,37 +659,9 @@ fn locate_host_script() -> Result<std::path::PathBuf, CommandError> {
         if candidate.exists() {
             return Ok(candidate);
         }
-        dir = d.parent().map(|d| d.to_path_buf());
+        dir = d.parent().map(|p| p.to_path_buf());
     }
     Err(CommandError::Agent(
         "agent-host/index.mjs not found — run `npm install` in agent-host/".into(),
-    ))
-}
-
-/// Find the `node` binary. The macOS webview process inherits a stripped PATH,
-/// so we probe common install locations after the normal PATH lookup.
-fn which_node() -> Result<std::path::PathBuf, CommandError> {
-    for candidate in &[
-        "node",
-        "/usr/local/bin/node",
-        "/opt/homebrew/bin/node",
-        "/usr/bin/node",
-    ] {
-        let path = std::path::Path::new(candidate);
-        if path.is_absolute() {
-            if path.exists() {
-                return Ok(path.to_path_buf());
-            }
-        } else if let Ok(out) = Command::new("which").arg(candidate).output() {
-            if out.status.success() {
-                let s = String::from_utf8_lossy(&out.stdout).trim().to_owned();
-                if !s.is_empty() {
-                    return Ok(std::path::PathBuf::from(s));
-                }
-            }
-        }
-    }
-    Err(CommandError::Agent(
-        "node not found; install Node.js to use the agent".into(),
     ))
 }

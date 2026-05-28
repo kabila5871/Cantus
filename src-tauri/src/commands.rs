@@ -232,6 +232,82 @@ pub async fn write_file(
     })
 }
 
+// ── History types and command ─────────────────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct HistoryMessage {
+    pub role: String,
+    pub content: String,
+    pub created_at: String,
+}
+
+#[derive(Serialize)]
+pub struct SessionSummary {
+    pub session_id: String,
+    pub summary: String,
+    pub created_at: String,
+}
+
+#[derive(Serialize)]
+pub struct ChatHistory {
+    pub messages: Vec<HistoryMessage>,
+    pub summaries: Vec<SessionSummary>,
+}
+
+#[tauri::command]
+pub async fn load_history(state: State<'_, AppState>) -> Result<ChatHistory, CommandError> {
+    let project_id = state
+        .open
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|p| p.id)
+        .ok_or(CommandError::NoProject)?;
+
+    let messages = sqlx::query(
+        "SELECT role, content, created_at FROM messages
+         WHERE project_id = ?1
+         ORDER BY created_at ASC, id ASC",
+    )
+    .bind(project_id)
+    .fetch_all(&state.db)
+    .await?
+    .into_iter()
+    .map(|row| {
+        use sqlx::Row;
+        HistoryMessage {
+            role: row.get("role"),
+            content: row.get("content"),
+            created_at: row.get("created_at"),
+        }
+    })
+    .collect();
+
+    let summaries = sqlx::query(
+        "SELECT session_id, summary, created_at FROM session_summaries
+         WHERE project_id = ?1
+         ORDER BY created_at DESC",
+    )
+    .bind(project_id)
+    .fetch_all(&state.db)
+    .await?
+    .into_iter()
+    .map(|row| {
+        use sqlx::Row;
+        SessionSummary {
+            session_id: row.get("session_id"),
+            summary: row.get("summary"),
+            created_at: row.get("created_at"),
+        }
+    })
+    .collect();
+
+    Ok(ChatHistory {
+        messages,
+        summaries,
+    })
+}
+
 // ── Git commands ──────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -296,6 +372,118 @@ pub async fn git_diff(
         (open.root.clone(), rel)
     };
     crate::git::diff(&root, &rel)
+}
+
+#[tauri::command]
+pub async fn git_branches(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::git::Branch>, CommandError> {
+    let root = state
+        .open
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|p| p.root.clone())
+        .ok_or(CommandError::NoProject)?;
+    crate::git::branches(&root)
+}
+
+#[tauri::command]
+pub async fn git_checkout(
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<crate::git::GitStatus, CommandError> {
+    let root = state
+        .open
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|p| p.root.clone())
+        .ok_or(CommandError::NoProject)?;
+    crate::git::checkout(&root, &name)
+}
+
+#[tauri::command]
+pub async fn git_create_branch(
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<crate::git::GitStatus, CommandError> {
+    let root = state
+        .open
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|p| p.root.clone())
+        .ok_or(CommandError::NoProject)?;
+    crate::git::create_branch(&root, &name)
+}
+
+#[tauri::command]
+pub async fn git_discard(
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+) -> Result<crate::git::GitStatus, CommandError> {
+    let (root, validated) = scoped_paths(&state, &paths)?;
+    crate::git::discard(&root, &validated)
+}
+
+#[tauri::command]
+pub async fn git_stage_hunk(
+    state: State<'_, AppState>,
+    path: String,
+    hunk_index: usize,
+) -> Result<crate::git::GitStatus, CommandError> {
+    let (root, rel) = scoped_single_path(&state, &path)?;
+    crate::git::stage_hunk(&root, &rel, hunk_index)
+}
+
+#[tauri::command]
+pub async fn git_unstage_hunk(
+    state: State<'_, AppState>,
+    path: String,
+    hunk_index: usize,
+) -> Result<crate::git::GitStatus, CommandError> {
+    let (root, rel) = scoped_single_path(&state, &path)?;
+    crate::git::unstage_hunk(&root, &rel, hunk_index)
+}
+
+#[tauri::command]
+pub async fn git_stage_lines(
+    state: State<'_, AppState>,
+    path: String,
+    hunk_index: usize,
+    line_indices: Vec<usize>,
+) -> Result<crate::git::GitStatus, CommandError> {
+    let (root, rel) = scoped_single_path(&state, &path)?;
+    crate::git::stage_lines(&root, &rel, hunk_index, &line_indices)
+}
+
+#[tauri::command]
+pub async fn git_unstage_lines(
+    state: State<'_, AppState>,
+    path: String,
+    hunk_index: usize,
+    line_indices: Vec<usize>,
+) -> Result<crate::git::GitStatus, CommandError> {
+    let (root, rel) = scoped_single_path(&state, &path)?;
+    crate::git::unstage_lines(&root, &rel, hunk_index, &line_indices)
+}
+
+/// Validate + resolve a single project-relative path, returning the root and
+/// the validated relative string (forward-slash, no escapes).
+fn scoped_single_path(
+    state: &State<'_, AppState>,
+    path: &str,
+) -> Result<(std::path::PathBuf, String), CommandError> {
+    let guard = state.open.lock().unwrap();
+    let open = guard.as_ref().ok_or(CommandError::NoProject)?;
+    let abs = resolve_scoped(&open.root, path, false)?;
+    let rel = abs
+        .strip_prefix(&open.root)
+        .map_err(|_| CommandError::Forbidden(path.to_owned()))?
+        .to_string_lossy()
+        .replace('\\', "/");
+    Ok((open.root.clone(), rel))
 }
 
 /// Validate + resolve a slice of project-relative paths, returning the project
@@ -366,6 +554,39 @@ pub async fn agent_status(
     Ok(crate::agent::status(&state.agent))
 }
 
+// ── LSP commands ──────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn lsp_start(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    language: crate::lsp::LspLanguage,
+) -> Result<crate::lsp::LspStatus, CommandError> {
+    let root = state
+        .open
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|p| p.root.to_string_lossy().into_owned())
+        .ok_or(CommandError::NoProject)?;
+    crate::lsp::start(state.inner(), app, language, root)
+}
+
+#[tauri::command]
+pub async fn lsp_send(state: State<'_, AppState>, payload: String) -> Result<(), CommandError> {
+    crate::lsp::send(&state.lsp, payload)
+}
+
+#[tauri::command]
+pub async fn lsp_stop(state: State<'_, AppState>) -> Result<crate::lsp::LspStatus, CommandError> {
+    Ok(crate::lsp::stop(&state.lsp))
+}
+
+#[tauri::command]
+pub fn lsp_status(state: State<'_, AppState>) -> crate::lsp::LspStatus {
+    crate::lsp::status(&state.lsp)
+}
+
 // ── PTY commands ──────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
@@ -379,8 +600,9 @@ pub async fn pty_spawn(
     app: AppHandle,
     cols: u16,
     rows: u16,
+    program: Option<String>,
 ) -> Result<SpawnedTerminal, CommandError> {
-    let id = pty::spawn(&state, app, cols, rows)?;
+    let id = pty::spawn(&state, app, cols, rows, program)?;
     Ok(SpawnedTerminal { id })
 }
 

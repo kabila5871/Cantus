@@ -4,9 +4,13 @@ import { resolve } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 
 let runId = 0;
-// At most one in-flight proposal per run — keyed by edit_id, value is { resolve, reject }.
+// In-flight edit proposals keyed by globally-unique edit_id; value is { resolve, reject }.
 const pendingProposals = new Map();
 let editIdCounter = 0;
+
+// Re-seed preamble built from the {type:'seed'} line; prepended to the first
+// prompt only. Subsequent prompts rely on the SDK's own compaction.
+let seedPreamble = "";
 
 function writeLine(obj) {
   process.stdout.write(JSON.stringify(obj) + "\n");
@@ -31,65 +35,67 @@ function buildContextPreamble(context) {
 }
 
 // Compute what the file will look like after the tool runs.
-// Returns new_content string, or throws if the file can't be read or the old_string isn't found.
+// Write replaces the whole file (and creates it if absent); Edit splices the
+// first old_string occurrence — throws if the file is missing or it's absent.
 function computeNewContent(toolName, input) {
-  const filePath = resolve(process.cwd(), input.path);
-  const original = readFileSync(filePath, "utf8");
   if (toolName === "Write") {
     return input.content;
   }
-  // Edit: replace first occurrence of old_string with new_string.
+  const original = readFileSync(resolve(process.cwd(), input.path), "utf8");
   const idx = original.indexOf(input.old_string);
   if (idx === -1) throw new Error(`old_string not found in ${input.path}`);
   return original.slice(0, idx) + input.new_string + original.slice(idx + input.old_string.length);
 }
 
-async function canUseTool(toolName, input) {
-  if (toolName !== "Edit" && toolName !== "Write") {
-    return { behavior: "allow" };
-  }
+// Build a per-run tool gate that attributes proposals to the run that owns it,
+// so concurrent prompts can't misattribute each other's edits.
+function makeCanUseTool(runId) {
+  return async (toolName, input) => {
+    if (toolName !== "Edit" && toolName !== "Write") {
+      return { behavior: "allow" };
+    }
 
-  let newContent;
-  try {
-    newContent = computeNewContent(toolName, input);
-  } catch (err) {
-    return { behavior: "deny", message: `Cannot preview edit: ${err.message}` };
-  }
+    let newContent;
+    try {
+      newContent = computeNewContent(toolName, input);
+    } catch (err) {
+      return { behavior: "deny", message: `Cannot preview edit: ${err.message}` };
+    }
 
-  const editId = ++editIdCounter;
-  const currentRunId = runId - 1; // runId was already incremented when the prompt started
+    const editId = ++editIdCounter;
+    writeLine({
+      run_id: runId,
+      type: "propose_edit",
+      edit_id: editId,
+      path: input.path,
+      new_content: newContent,
+    });
 
-  writeLine({
-    run_id: currentRunId,
-    type: "propose_edit",
-    edit_id: editId,
-    path: input.path,
-    new_content: newContent,
-  });
+    const decision = await new Promise((res, rej) => {
+      pendingProposals.set(editId, { resolve: res, reject: rej });
+    });
+    pendingProposals.delete(editId);
 
-  // Wait for the frontend to resolve or reject via stdin.
-  const decision = await new Promise((res, rej) => {
-    pendingProposals.set(editId, { resolve: res, reject: rej });
-  });
-
-  pendingProposals.delete(editId);
-
-  if (decision === "accepted") {
+    if (decision === "accepted") {
+      return {
+        behavior: "deny",
+        message: `User accepted the edit. The file ${input.path} now reflects the change.`,
+      };
+    }
     return {
       behavior: "deny",
-      message: `User accepted the edit. The file ${input.path} now reflects the change.`,
+      message: `User rejected the edit to ${input.path}. No changes were written.`,
     };
-  }
-  return {
-    behavior: "deny",
-    message: `User rejected the edit to ${input.path}. No changes were written.`,
   };
 }
 
 async function runPrompt(text, context) {
   const currentRunId = runId++;
-  const preamble = buildContextPreamble(context);
-  const prompt = preamble + text;
+  const contextPart = buildContextPreamble(context);
+  // Consume the seed preamble exactly once — cleared after the first prompt.
+  const seed = seedPreamble;
+  seedPreamble = "";
+  const prompt = seed + contextPart + text;
   try {
     for await (const message of query({
       prompt,
@@ -97,7 +103,7 @@ async function runPrompt(text, context) {
         cwd: process.cwd(),
         includePartialMessages: true,
         allowedTools: ["Read", "Glob", "Grep", "Edit", "Write"],
-        canUseTool,
+        canUseTool: makeCanUseTool(currentRunId),
       },
     })) {
       writeLine({ run_id: currentRunId, ...message });
@@ -109,6 +115,36 @@ async function runPrompt(text, context) {
       message: String(err?.message ?? err),
     });
   }
+}
+
+// Run the summarize query entirely internally: its SDK turns must never reach
+// the host's stdout, or they'd be persisted as chat history and shown in the
+// chat pane. Only the final {type:'session_summary'} line is emitted.
+async function handleSummarize() {
+  let summary = "";
+  try {
+    for await (const message of query({
+      prompt:
+        "Summarize this conversation so it can re-seed a future session: key goals, decisions, and current state, in one short paragraph.",
+      options: {
+        cwd: process.cwd(),
+        allowedTools: [],
+      },
+    })) {
+      if (message.type === "assistant") {
+        const content = message.message?.content ?? [];
+        for (const block of content) {
+          if (block.type === "text") summary += block.text;
+        }
+      }
+    }
+  } catch {
+    // Best-effort — emit an empty summary so the reader still gets the line.
+  }
+  writeLine({ type: "session_summary", summary });
+  // summarize is only sent during shutdown; exit so the host's stdout closes
+  // and the Rust reader thread sees EOF and self-cleans the agent slot.
+  process.exit(0);
 }
 
 const rl = createInterface({ input: process.stdin, terminal: false });
@@ -123,6 +159,20 @@ rl.on("line", (line) => {
     return;
   }
 
+  if (parsed?.type === "seed") {
+    // Build a one-time preamble prepended to the first runPrompt call.
+    const parts = ["[Resuming session]"];
+    if (parsed.summary) parts.push(`Prior-sessions summary: ${parsed.summary}`);
+    if (parsed.recent?.length) {
+      parts.push(
+        "Recent messages:\n" +
+          parsed.recent.map((m) => `${m.role}: ${m.content}`).join("\n")
+      );
+    }
+    seedPreamble = parts.join("\n") + "\n\n";
+    return;
+  }
+
   if (parsed?.type === "prompt" && typeof parsed.text === "string") {
     runPrompt(parsed.text, parsed.context ?? null);
     return;
@@ -131,6 +181,11 @@ rl.on("line", (line) => {
   if (parsed?.type === "resolve_edit" && typeof parsed.edit_id === "number") {
     const pending = pendingProposals.get(parsed.edit_id);
     if (pending) pending.resolve(parsed.decision);
+    return;
+  }
+
+  if (parsed?.type === "summarize") {
+    handleSummarize();
     return;
   }
 });

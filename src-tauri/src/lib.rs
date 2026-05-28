@@ -3,6 +3,7 @@ mod commands;
 mod db;
 mod error;
 mod git;
+mod lsp;
 mod pty;
 mod state;
 mod watcher;
@@ -25,6 +26,8 @@ pub fn run() {
                 next_terminal_id: std::sync::atomic::AtomicU32::new(0),
                 agent: std::sync::Mutex::new(None),
                 agent_generation: std::sync::atomic::AtomicU32::new(0),
+                lsp: std::sync::Mutex::new(None),
+                lsp_generation: std::sync::atomic::AtomicU32::new(0),
             });
             Ok(())
         })
@@ -44,11 +47,24 @@ pub fn run() {
             commands::git_unstage,
             commands::git_commit,
             commands::git_diff,
+            commands::git_branches,
+            commands::git_checkout,
+            commands::git_create_branch,
+            commands::git_discard,
+            commands::git_stage_hunk,
+            commands::git_unstage_hunk,
+            commands::git_stage_lines,
+            commands::git_unstage_lines,
             commands::agent_start,
             commands::agent_send,
             commands::agent_resolve_edit,
             commands::agent_stop,
             commands::agent_status,
+            commands::load_history,
+            commands::lsp_start,
+            commands::lsp_send,
+            commands::lsp_stop,
+            commands::lsp_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Cantus");

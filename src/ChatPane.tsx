@@ -2,21 +2,31 @@ import { useEffect, useRef, useState } from "react";
 import {
   agentStart,
   agentSend,
-  agentResolveEdit,
   agentStop,
   agentStatus,
   listenAgentEvent,
-  writeFile,
   type CommandError,
 } from "./ipc";
+import { acceptPendingEdit, rejectPendingEdit } from "./keybindings";
 import { useStore } from "./store";
 
-export function ChatPane() {
+interface Props {
+  onRegisterFocusCb: (cb: () => void) => void;
+}
+
+export function ChatPane({ onRegisterFocusCb }: Props) {
   const store = useStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const agentStatusRef = useRef(store.agentStatus);
+  agentStatusRef.current = store.agentStatus;
+
+  // Register the focus callback so App/keybindings can focus the input.
+  useEffect(() => {
+    onRegisterFocusCb(() => textareaRef.current?.focus());
+  }, [onRegisterFocusCb]);
 
   // Restore agent lifecycle mirror and subscribe to the event stream on mount.
   useEffect(() => {
@@ -45,7 +55,12 @@ export function ChatPane() {
           store.addChatError(evt.run_id, evt.message);
           break;
         case "status":
-          store.setAgentStatus({ state: evt.state, project_id: null });
+          // Merge: preserve project_id and session_id already set by agent_start;
+          // only the lifecycle state transitions from the event stream.
+          store.setAgentStatus({
+            ...agentStatusRef.current,
+            state: evt.state,
+          });
           break;
         case "propose_edit":
           store.setPendingEdit({
@@ -115,32 +130,6 @@ export function ChatPane() {
       });
   };
 
-  const handleAcceptEdit = async () => {
-    const edit = store.pendingEdit;
-    if (!edit) return;
-    try {
-      const entry = await writeFile(edit.path, edit.new_content);
-      store.reconcileBuffer(edit.path, entry.content_hash);
-      await agentResolveEdit(edit.edit_id, "accepted");
-    } catch (e) {
-      store.addChatError(-1, `Accept failed: ${(e as CommandError).message}`);
-    } finally {
-      store.clearPendingEdit();
-    }
-  };
-
-  const handleRejectEdit = async () => {
-    const edit = store.pendingEdit;
-    if (!edit) return;
-    try {
-      await agentResolveEdit(edit.edit_id, "rejected");
-    } catch (e) {
-      store.addChatError(-1, `Reject failed: ${(e as CommandError).message}`);
-    } finally {
-      store.clearPendingEdit();
-    }
-  };
-
   return (
     <div className="chat-pane">
       <div className="chat-pane__header">
@@ -158,7 +147,12 @@ export function ChatPane() {
             key={i}
             className={`chat-msg chat-msg--${msg.kind}${msg.streaming ? " chat-msg--streaming" : ""}`}
           >
-            {msg.kind === "activity" ? (
+            {msg.kind === "user" ? (
+              <>
+                <span className="chat-msg__prompt-prefix">›</span>
+                <span className="chat-msg__text">{msg.text}</span>
+              </>
+            ) : msg.kind === "activity" ? (
               <span className="chat-msg__activity">{msg.text}</span>
             ) : (
               <span className="chat-msg__text">{msg.text}</span>
@@ -174,30 +168,26 @@ export function ChatPane() {
             Edit proposed: {store.pendingEdit.path}
           </span>
           <div className="chat-pane__pending-edit-actions">
-            <button onClick={() => void handleAcceptEdit()}>Accept</button>
-            <button onClick={() => void handleRejectEdit()}>Reject</button>
+            <button onClick={() => void acceptPendingEdit(store)}>Accept</button>
+            <button onClick={() => void rejectPendingEdit(store)}>Reject</button>
           </div>
         </div>
       )}
 
       <div className="chat-pane__input-row">
-        <textarea
-          ref={textareaRef}
-          className="chat-pane__textarea"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Ask Claude… (Enter to send, Shift+Enter for newline)"
-          rows={3}
-          disabled={sending}
-        />
-        <button
-          className="chat-pane__send"
-          onClick={() => void send()}
-          disabled={sending || !input.trim()}
-        >
-          Send
-        </button>
+        <div className="chat-pane__input-wrap">
+          <span className="chat-pane__input-prefix">›</span>
+          <textarea
+            ref={textareaRef}
+            className="chat-pane__textarea"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="ask claude… (enter to send, shift+enter for newline)"
+            rows={3}
+            disabled={sending}
+          />
+        </div>
       </div>
     </div>
   );

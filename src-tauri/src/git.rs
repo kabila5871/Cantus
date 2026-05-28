@@ -1,9 +1,16 @@
 use crate::error::CommandError;
-use git2::{DiffOptions, Repository, StatusOptions};
+use git2::{ApplyLocation, BranchType, Diff, DiffOptions, Repository, StatusOptions};
 use serde::Serialize;
 use std::path::Path;
 
 // ── Serializable types ────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct Branch {
+    pub name: String,
+    pub is_current: bool,
+    pub is_remote: bool,
+}
 
 #[derive(Serialize, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
@@ -254,6 +261,285 @@ pub fn commit(root: &Path, message: &str) -> Result<GitStatus, CommandError> {
 
     repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents)?;
 
+    compute_status(&repo)
+}
+
+pub fn branches(root: &Path) -> Result<Vec<Branch>, CommandError> {
+    let repo = open(root)?;
+    let head_name = repo
+        .head()
+        .ok()
+        .filter(|h| h.is_branch())
+        .and_then(|h| h.shorthand().map(str::to_owned));
+
+    let mut out: Vec<Branch> = Vec::new();
+
+    for b in repo.branches(None)? {
+        let (branch, btype) = b?;
+        let name = match branch.name()? {
+            Some(n) => n.to_owned(),
+            None => continue,
+        };
+        let is_remote = btype == BranchType::Remote;
+        let is_current = !is_remote && head_name.as_deref() == Some(&name);
+        out.push(Branch {
+            name,
+            is_current,
+            is_remote,
+        });
+    }
+
+    Ok(out)
+}
+
+pub fn checkout(root: &Path, name: &str) -> Result<GitStatus, CommandError> {
+    let repo = open(root)?;
+    let branch = repo.find_branch(name, BranchType::Local)?;
+    let commit = branch.get().peel_to_commit()?;
+    let tree = commit.tree()?;
+    repo.checkout_tree(tree.as_object(), None)?;
+    repo.set_head(&format!("refs/heads/{name}"))?;
+    compute_status(&repo)
+}
+
+pub fn create_branch(root: &Path, name: &str) -> Result<GitStatus, CommandError> {
+    let repo = open(root)?;
+    let head_commit = repo
+        .head()?
+        .peel_to_commit()
+        .map_err(|_| CommandError::Git("HEAD has no commit".into()))?;
+    let branch = repo.branch(name, &head_commit, false)?;
+    let tree = head_commit.tree()?;
+    repo.checkout_tree(tree.as_object(), None)?;
+    repo.set_head(
+        branch
+            .get()
+            .name()
+            .ok_or_else(|| CommandError::Git("invalid branch ref".into()))?,
+    )?;
+    compute_status(&repo)
+}
+
+pub fn discard(root: &Path, paths: &[String]) -> Result<GitStatus, CommandError> {
+    let repo = open(root)?;
+    if !paths.is_empty() {
+        let head_commit = repo
+            .head()?
+            .peel_to_commit()
+            .map_err(|_| CommandError::Git("HEAD has no commit".into()))?;
+        let head_tree = head_commit.tree()?;
+        let mut checkout_opts = git2::build::CheckoutBuilder::new();
+        for p in paths {
+            checkout_opts.path(p);
+        }
+        checkout_opts.force();
+        repo.checkout_tree(head_tree.as_object(), Some(&mut checkout_opts))?;
+    }
+    compute_status(&repo)
+}
+
+// ── Partial staging ───────────────────────────────────────────────────────────
+
+/// Collect hunks for `path` from the given `diff`, pairing each hunk with its
+/// lines, and return the one at `hunk_index`.
+fn extract_hunk(
+    diff: &Diff<'_>,
+    hunk_index: usize,
+) -> Result<(git2::DiffHunk<'static>, Vec<git2::DiffLine<'static>>), CommandError> {
+    use std::cell::Cell;
+
+    let target = Cell::new(usize::MAX);
+    let mut hunks: Vec<(git2::DiffHunk<'static>, Vec<git2::DiffLine<'static>>)> = Vec::new();
+
+    diff.foreach(
+        &mut |_, _| true,
+        None,
+        Some(&mut |_, hunk| {
+            let idx = hunks.len();
+            // SAFETY: git2's DiffHunk is valid for the lifetime of the diff.
+            // We clone the underlying data via the owned representation.
+            let owned: git2::DiffHunk<'static> = unsafe { std::mem::transmute(hunk.clone()) };
+            hunks.push((owned, Vec::new()));
+            target.set(idx);
+            true
+        }),
+        Some(&mut |_, _, line| {
+            let idx = target.get();
+            if idx != usize::MAX {
+                let owned: git2::DiffLine<'static> = unsafe { std::mem::transmute(line.clone()) };
+                hunks[idx].1.push(owned);
+            }
+            true
+        }),
+    )?;
+
+    hunks
+        .into_iter()
+        .nth(hunk_index)
+        .ok_or_else(|| CommandError::Git(format!("hunk index {hunk_index} out of range")))
+}
+
+/// Build a minimal unified-diff patch string from a subset of lines within a
+/// hunk.  `selected` is the index set into `all_lines`; pass `None` to include
+/// every line (whole-hunk staging).  `reverse` swaps +/- so the patch undoes
+/// the change (used for unstaging).
+fn build_patch(
+    path: &str,
+    hunk: &git2::DiffHunk<'_>,
+    all_lines: &[git2::DiffLine<'_>],
+    selected: Option<&[usize]>,
+    reverse: bool,
+) -> String {
+    // Count additions and deletions in the selected subset so we can write a
+    // correct @@ header.
+    let mut adds: u32 = 0;
+    let mut dels: u32 = 0;
+    let mut body = String::new();
+
+    for (i, line) in all_lines.iter().enumerate() {
+        if let Some(sel) = selected {
+            if !sel.contains(&i) {
+                // Excluded diff lines become context lines.
+                match line.origin() {
+                    '+' | '-' => {
+                        // Turn into context; use whichever side has the content.
+                        let content = std::str::from_utf8(line.content()).unwrap_or("");
+                        body.push(' ');
+                        body.push_str(content);
+                        adds += 1;
+                        dels += 1;
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        match line.origin() {
+            '+' => {
+                if reverse {
+                    body.push('-');
+                    dels += 1;
+                } else {
+                    body.push('+');
+                    adds += 1;
+                }
+            }
+            '-' => {
+                if reverse {
+                    body.push('+');
+                    adds += 1;
+                } else {
+                    body.push('-');
+                    dels += 1;
+                }
+            }
+            ' ' => {
+                body.push(' ');
+                adds += 1;
+                dels += 1;
+            }
+            _ => continue,
+        }
+        let content = std::str::from_utf8(line.content()).unwrap_or("");
+        body.push_str(content);
+    }
+
+    // For a forward patch: old side = index (has dels + context), new = workdir (has adds + context).
+    // For a reverse patch: we swap the sides so libgit2 applies it as an undo.
+    let (old_start, old_count, new_start, new_count) = if reverse {
+        (hunk.new_start(), adds, hunk.old_start(), dels)
+    } else {
+        (hunk.old_start(), dels, hunk.new_start(), adds)
+    };
+
+    if !body.ends_with('\n') {
+        body.push('\n');
+    }
+
+    format!(
+        "--- a/{path}\n+++ b/{path}\n@@ -{old_start},{old_count} +{new_start},{new_count} @@\n{body}",
+    )
+}
+
+fn unstaged_diff_for_path<'repo>(
+    repo: &'repo Repository,
+    path: &str,
+) -> Result<Diff<'repo>, CommandError> {
+    let mut opts = DiffOptions::new();
+    opts.pathspec(path);
+    Ok(repo.diff_index_to_workdir(None, Some(&mut opts))?)
+}
+
+fn staged_diff_for_path<'repo>(
+    repo: &'repo Repository,
+    path: &str,
+) -> Result<Diff<'repo>, CommandError> {
+    let mut opts = DiffOptions::new();
+    opts.pathspec(path);
+    let head_tree = repo
+        .head()
+        .ok()
+        .and_then(|h| h.peel_to_commit().ok())
+        .map(|c| c.tree())
+        .transpose()?;
+    Ok(match head_tree.as_ref() {
+        Some(tree) => repo.diff_tree_to_index(Some(tree), None, Some(&mut opts))?,
+        None => repo.diff_tree_to_index(None, None, Some(&mut opts))?,
+    })
+}
+
+pub fn stage_hunk(root: &Path, path: &str, hunk_index: usize) -> Result<GitStatus, CommandError> {
+    let repo = open(root)?;
+    let d = unstaged_diff_for_path(&repo, path)?;
+    let (hunk, lines) = extract_hunk(&d, hunk_index)?;
+    let patch = build_patch(path, &hunk, &lines, None, false);
+    let patch_diff = Diff::from_buffer(patch.as_bytes())
+        .map_err(|e| CommandError::Git(e.message().to_owned()))?;
+    repo.apply(&patch_diff, ApplyLocation::Index, None)?;
+    compute_status(&repo)
+}
+
+pub fn unstage_hunk(root: &Path, path: &str, hunk_index: usize) -> Result<GitStatus, CommandError> {
+    let repo = open(root)?;
+    let d = staged_diff_for_path(&repo, path)?;
+    let (hunk, lines) = extract_hunk(&d, hunk_index)?;
+    let patch = build_patch(path, &hunk, &lines, None, true);
+    let patch_diff = Diff::from_buffer(patch.as_bytes())
+        .map_err(|e| CommandError::Git(e.message().to_owned()))?;
+    repo.apply(&patch_diff, ApplyLocation::Index, None)?;
+    compute_status(&repo)
+}
+
+pub fn stage_lines(
+    root: &Path,
+    path: &str,
+    hunk_index: usize,
+    line_indices: &[usize],
+) -> Result<GitStatus, CommandError> {
+    let repo = open(root)?;
+    let d = unstaged_diff_for_path(&repo, path)?;
+    let (hunk, lines) = extract_hunk(&d, hunk_index)?;
+    let patch = build_patch(path, &hunk, &lines, Some(line_indices), false);
+    let patch_diff = Diff::from_buffer(patch.as_bytes())
+        .map_err(|e| CommandError::Git(e.message().to_owned()))?;
+    repo.apply(&patch_diff, ApplyLocation::Index, None)?;
+    compute_status(&repo)
+}
+
+pub fn unstage_lines(
+    root: &Path,
+    path: &str,
+    hunk_index: usize,
+    line_indices: &[usize],
+) -> Result<GitStatus, CommandError> {
+    let repo = open(root)?;
+    let d = staged_diff_for_path(&repo, path)?;
+    let (hunk, lines) = extract_hunk(&d, hunk_index)?;
+    let patch = build_patch(path, &hunk, &lines, Some(line_indices), true);
+    let patch_diff = Diff::from_buffer(patch.as_bytes())
+        .map_err(|e| CommandError::Git(e.message().to_owned()))?;
+    repo.apply(&patch_diff, ApplyLocation::Index, None)?;
     compute_status(&repo)
 }
 

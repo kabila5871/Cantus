@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+agent-host/node_modules/
 
 # Frontend build
 dist/

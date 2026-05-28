@@ -1,6 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { appInfo, currentProject, listenFsChanged, gitStatus, type AppInfo } from "./ipc";
+import {
+  appInfo,
+  currentProject,
+  listenFsChanged,
+  gitStatus,
+  loadHistory,
+  lspStatus,
+  type AppInfo,
+} from "./ipc";
 import { StoreProvider } from "./StoreProvider";
 import { useStore } from "./store";
 import { Explorer } from "./Explorer";
@@ -8,7 +16,9 @@ import { EditorPane } from "./EditorPane";
 import { Terminal } from "./Terminal";
 import { GitPanel } from "./GitPanel";
 import { DiffView } from "./DiffView";
-import { ChatPane } from "./ChatPane";
+import { StatusBar } from "./StatusBar";
+import { CommandPalette } from "./CommandPalette";
+import { handleGlobalKeyDown } from "./keybindings";
 import "@xterm/xterm/css/xterm.css";
 import "./App.css";
 
@@ -21,29 +31,46 @@ type SidebarTab = "explorer" | "git";
 function WorkspaceInner({ info }: { info: AppInfo | null }) {
   const store = useStore();
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("explorer");
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const chatFocusCbRef = useRef<(() => void) | null>(null);
 
-  // The fs-event subscription below lives for the component's lifetime, so it
-  // must read the live buffer map, not the empty one captured at mount.
   const buffersRef = useRef(store.buffers);
   buffersRef.current = store.buffers;
 
-  // Restore active project on mount and subscribe to fs events.
+  const focusChatInput = useCallback(() => {
+    chatFocusCbRef.current?.();
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      handleGlobalKeyDown(e, store, () => setPaletteOpen(true), focusChatInput);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [store, focusChatInput]);
+
   useEffect(() => {
     void currentProject().then((p) => {
-      if (p) store.setProject(p);
+      if (!p) return;
+      store.hydrateHistory({ messages: [], summaries: [] });
+      store.setProject(p);
+      loadHistory()
+        .then((h) => store.hydrateHistory(h))
+        .catch((e: { message?: string }) => {
+          store.addChatError(-1, `Failed to load history: ${e.message ?? String(e)}`);
+        });
     });
+
+    void lspStatus().then((s) => store.setLspStatus(s)).catch(() => {});
 
     let unlisten: (() => void) | undefined;
     void listenFsChanged((change) => {
-      // Parent dir of the changed path needs re-fetch.
       const parts = change.path.split("/");
       parts.pop();
       const parent = parts.join("/") || "";
 
       store.invalidatePath(parent);
 
-      // Flag an open buffer only if disk content truly diverged from what we
-      // last wrote/read — hash comparison suppresses our own write events.
       if (change.kind !== "removed") {
         const buf = buffersRef.current.get(change.path);
         if (buf && change.content_hash && change.content_hash !== buf.contentHash) {
@@ -51,7 +78,6 @@ function WorkspaceInner({ info }: { info: AppInfo | null }) {
         }
       }
 
-      // Refresh git mirror on any worktree change.
       void gitStatus()
         .then((s) => store.setGitStatus(s))
         .catch(() => {});
@@ -71,23 +97,6 @@ function WorkspaceInner({ info }: { info: AppInfo | null }) {
         <span className="titlebar__path">
           {store.project?.root_path ?? "No project open"}
         </span>
-        {store.gitStatus && (
-          <span className="titlebar__git">
-            {store.gitStatus.branch ?? "HEAD"}
-            {store.gitStatus.entries.filter((e) => e.staged != null).length > 0 && (
-              <span className="titlebar__git-staged">
-                {" "}
-                S:{store.gitStatus.entries.filter((e) => e.staged != null).length}
-              </span>
-            )}
-            {store.gitStatus.entries.filter((e) => e.unstaged != null).length > 0 && (
-              <span className="titlebar__git-changed">
-                {" "}
-                M:{store.gitStatus.entries.filter((e) => e.unstaged != null).length}
-              </span>
-            )}
-          </span>
-        )}
         {info && <span className="titlebar__version">v{info.version}</span>}
       </header>
 
@@ -108,7 +117,9 @@ function WorkspaceInner({ info }: { info: AppInfo | null }) {
                 Git
               </button>
             </div>
-            {sidebarTab === "explorer" ? <Explorer /> : <GitPanel />}
+            <div className="sidebar-body">
+              {sidebarTab === "explorer" ? <Explorer /> : <GitPanel />}
+            </div>
           </Pane>
         </Panel>
         <PanelResizeHandle className="resize resize--col" />
@@ -130,10 +141,19 @@ function WorkspaceInner({ info }: { info: AppInfo | null }) {
         <PanelResizeHandle className="resize resize--col" />
         <Panel defaultSize={28} minSize={18}>
           <Pane>
-            <ChatPane />
+            <Terminal program="claude" />
           </Pane>
         </Panel>
       </PanelGroup>
+
+      <StatusBar />
+
+      {paletteOpen && (
+        <CommandPalette
+          onClose={() => setPaletteOpen(false)}
+          focusChatInput={focusChatInput}
+        />
+      )}
     </div>
   );
 }

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useCallback } from "react";
 import MonacoEditor, { DiffEditor, loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
-import { writeFile, agentResolveEdit, type CommandError, type Selection } from "./ipc";
+import { writeFile, type CommandError, type Selection } from "./ipc";
 import { useStore } from "./store";
+import { acceptPendingEdit, rejectPendingEdit } from "./keybindings";
 import { langFromPath } from "./lang";
+import { ensurePythonLsp, teardownLsp } from "./lsp";
 
 loader.config({ monaco });
 
@@ -49,12 +51,10 @@ function TabBar() {
 }
 
 function ProposedEditDiff({
-  editId,
   path,
   original,
   newContent,
 }: {
-  editId: number;
   path: string;
   original: string;
   newContent: string;
@@ -62,29 +62,11 @@ function ProposedEditDiff({
   const store = useStore();
 
   const handleAccept = async () => {
-    try {
-      const entry = await writeFile(path, newContent);
-      store.reconcileBuffer(path, entry.content_hash);
-      // Update the live Monaco model so the editor reflects the accepted content.
+    const written = await acceptPendingEdit(store);
+    // Reflect the accepted content in the live Monaco model.
+    if (written !== null) {
       const uri = monaco.Uri.parse(`file:///${path}`);
-      monaco.editor.getModel(uri)?.setValue(newContent);
-      await agentResolveEdit(editId, "accepted");
-    } catch (e) {
-      const err = e as CommandError;
-      store.addChatError(-1, `Accept failed: ${err.message}`);
-    } finally {
-      store.clearPendingEdit();
-    }
-  };
-
-  const handleReject = async () => {
-    try {
-      await agentResolveEdit(editId, "rejected");
-    } catch (e) {
-      const err = e as CommandError;
-      store.addChatError(-1, `Reject failed: ${err.message}`);
-    } finally {
-      store.clearPendingEdit();
+      monaco.editor.getModel(uri)?.setValue(written);
     }
   };
 
@@ -96,7 +78,7 @@ function ProposedEditDiff({
           <button className="proposed-diff__accept" onClick={() => void handleAccept()}>
             Accept
           </button>
-          <button className="proposed-diff__reject" onClick={() => void handleReject()}>
+          <button className="proposed-diff__reject" onClick={() => void rejectPendingEdit(store)}>
             Reject
           </button>
         </div>
@@ -126,11 +108,34 @@ export function EditorPane() {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const prevPathRef = useRef<string | null>(null);
   const modelsRef = useRef<Map<string, monaco.editor.ITextModel>>(new Map());
-  // Debounce timer for selection updates.
   const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lspStartedRef = useRef(false);
 
   const activePath = store.activeBufferPath;
   const activeBuf = activePath ? store.buffers.get(activePath) : undefined;
+
+  // Start LSP when the first Python file opens and a project is loaded.
+  // Tear down when the project changes (project becomes null then re-set).
+  useEffect(() => {
+    if (!store.project) {
+      if (lspStartedRef.current) {
+        lspStartedRef.current = false;
+        void teardownLsp().then(() =>
+          store.setLspStatus({ state: "stopped", language: null, generation: 0 }),
+        );
+      }
+      return;
+    }
+    if (lspStartedRef.current) return;
+    if (activePath && langFromPath(activePath) === "python") {
+      lspStartedRef.current = true;
+      void ensurePythonLsp()
+        .then((s) => store.setLspStatus(s))
+        .catch(() => {
+          lspStartedRef.current = false;
+        });
+    }
+  }, [store.project, activePath]); // eslint-disable-line react-hooks/exhaustive-deps -- store methods stable
 
   const pendingEdit =
     store.pendingEdit?.path === activePath ? store.pendingEdit : null;
@@ -180,7 +185,7 @@ export function EditorPane() {
 
       editor.onDidChangeModelContent(() => {
         const path = store.activeBufferPath;
-        if (path) store.markDirty(path);
+        if (path) store.updateBuffer(path, editor.getModel()?.getValue() ?? "");
       });
 
       // Debounced selection capture — snapshot is read at send time, not streamed.
@@ -240,7 +245,6 @@ export function EditorPane() {
       <div className="editor-pane">
         <TabBar />
         <ProposedEditDiff
-          editId={pendingEdit.edit_id}
           path={pendingEdit.path}
           original={currentContent}
           newContent={pendingEdit.new_content}

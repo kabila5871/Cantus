@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "setup": "node scripts/dev-symlink.mjs",
     "check": "tsc --noEmit && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings",
     "release": "npm version patch -m \"chore(release): v%s\" && git push --follow-tags",
     "release:minor": "npm version minor -m \"chore(release): v%s\" && git push --follow-tags",
@@ -21,9 +22,12 @@
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "monaco-editor": "^0.55.1",
+    "monaco-languageclient": "^10.7.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-resizable-panels": "^2.1.7"
+    "react-resizable-panels": "^2.1.7",
+    "vscode-jsonrpc": "^8.2.1",
+    "vscode-languageserver-protocol": "^3.17.5"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

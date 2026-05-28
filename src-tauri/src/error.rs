@@ -18,6 +18,8 @@ pub enum CommandError {
     Git(String),
     #[error("agent error: {0}")]
     Agent(String),
+    #[error("lsp error: {0}")]
+    Lsp(String),
 }
 
 impl CommandError {
@@ -31,6 +33,7 @@ impl CommandError {
             Self::Pty(_) => "pty",
             Self::Git(_) => "git",
             Self::Agent(_) => "agent",
+            Self::Lsp(_) => "lsp",
         }
     }
 }

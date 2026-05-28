@@ -22,6 +22,7 @@ pub fn spawn(
     app: AppHandle,
     cols: u16,
     rows: u16,
+    program: Option<String>,
 ) -> Result<u32, CommandError> {
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -33,13 +34,24 @@ pub fn spawn(
         })
         .map_err(|e| CommandError::Pty(e.to_string()))?;
 
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
     let cwd = {
         let guard = state.open.lock().unwrap();
         guard.as_ref().map(|p| p.root.clone()).or_else(dirs_cwd)
     };
 
-    let mut cmd = CommandBuilder::new(&shell);
+    let mut cmd = match program {
+        // A named program (e.g. "claude") runs with the parent environment so it
+        // resolves on PATH, plus a usable TERM since it never sources a profile.
+        Some(prog) => {
+            let mut c = CommandBuilder::new(prog);
+            for (k, v) in std::env::vars() {
+                c.env(k, v);
+            }
+            c.env("TERM", "xterm-256color");
+            c
+        }
+        None => CommandBuilder::new(std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into())),
+    };
     if let Some(dir) = cwd {
         cmd.cwd(dir);
     }

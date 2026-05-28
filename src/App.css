@@ -908,3 +908,716 @@ body,
 .tab__close--dirty:hover .tab__close-dot {
   display: none;
 }
+
+/* Sidebar tab body (Explorer / lazygit) fills the space under the tabs */
+.sidebar-body {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Status bar */
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 22px;
+  padding: 0 10px;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  user-select: none;
+  overflow: hidden;
+}
+
+.status-bar__spacer {
+  flex: 1;
+}
+
+.status-bar__git {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-bar__git-branch {
+  color: var(--accent);
+}
+
+.status-bar__staged {
+  color: #6abf69;
+}
+
+.status-bar__changed {
+  color: #e0a050;
+}
+
+.status-bar__file {
+  color: var(--text);
+}
+
+.status-bar__dirty {
+  color: #e0a050;
+}
+
+.status-bar__pending-edit {
+  color: var(--accent);
+  font-style: italic;
+}
+
+.status-bar__agent--running {
+  color: #6abf69;
+}
+
+.status-bar__agent--stopped {
+  color: var(--text-dim);
+}
+
+.status-bar__lsp--running {
+  color: var(--accent);
+}
+
+.status-bar__lsp--stopped {
+  color: var(--text-dim);
+}
+
+/* Command palette */
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 80px;
+}
+
+.palette {
+  width: 480px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.palette__input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  padding: 10px 14px;
+  outline: none;
+}
+
+.palette__input::placeholder {
+  color: var(--text-dim);
+}
+
+.palette__list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.palette__item {
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.palette__item--selected {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+/* Proposed diff footer (inline in chat pane) */
+.chat-pane__pending-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.chat-pane__pending-edit-path {
+  flex: 1;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-pane__pending-edit-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.chat-pane__pending-edit-actions button {
+  padding: 2px 9px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.chat-pane__pending-edit-actions button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Proposed diff inline in editor pane */
+.proposed-diff {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.proposed-diff__header {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  height: 30px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.proposed-diff__label {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proposed-diff__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.proposed-diff__accept,
+.proposed-diff__reject {
+  padding: 3px 10px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+
+.proposed-diff__accept {
+  background: #6abf69;
+  color: #fff;
+}
+
+.proposed-diff__accept:hover {
+  background: color-mix(in srgb, #6abf69 80%, white);
+}
+
+.proposed-diff__reject {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.proposed-diff__reject:hover {
+  border-color: #e05050;
+  color: #e05050;
+}
+
+.proposed-diff__monaco {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Branch switcher ─────────────────────────────────────────────────────── */
+
+.branch-switcher {
+  position: relative;
+  min-width: 0;
+  flex: 1;
+}
+
+.git-panel__branch--btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* inherits .git-panel__branch color/font from existing rule */
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.git-panel__branch--btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.branch-switcher__chevron {
+  font-size: 8px;
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+
+.branch-switcher__dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 160px;
+  max-width: 240px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.branch-switcher__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.branch-switcher__item:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.branch-switcher__item--current {
+  color: var(--accent);
+}
+
+.branch-switcher__check {
+  font-size: 10px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.branch-switcher__item--new {
+  color: var(--text-dim);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+}
+
+.branch-switcher__item--new:hover {
+  color: var(--text);
+}
+
+.branch-switcher__new-row {
+  display: flex;
+  gap: 4px;
+  padding: 5px 8px;
+  border-top: 1px solid var(--border);
+}
+
+.branch-switcher__new-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 2px 6px;
+  min-width: 0;
+}
+
+.branch-switcher__new-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.branch-switcher__new-confirm {
+  padding: 2px 8px;
+  background: var(--accent);
+  border: none;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.branch-switcher__new-confirm:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Git row: discard button ─────────────────────────────────────────────── */
+
+.git-row__action--discard {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.git-row__action--discard:hover {
+  color: #e05050;
+}
+
+/* ── Chat pane: terminal REPL restyle ────────────────────────────────────── */
+
+/* Monospace base for the entire messages area */
+.chat-pane__messages {
+  font-family: "SF Mono", Menlo, "Cascadia Code", monospace;
+}
+
+/* Assistant output: monospace streamed text */
+.chat-msg--assistant .chat-msg__text {
+  font-family: "SF Mono", Menlo, "Cascadia Code", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* User messages: terminal prompt style (no bubble, just prefixed text) */
+.chat-msg--user {
+  align-self: unset;
+  max-width: unset;
+}
+
+.chat-msg--user .chat-msg__text {
+  display: inline;
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  color: var(--text);
+  font-family: "SF Mono", Menlo, "Cascadia Code", monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-msg__prompt-prefix {
+  margin-right: 6px;
+  color: var(--accent);
+  font-family: "SF Mono", Menlo, "Cascadia Code", monospace;
+  font-size: 13px;
+  font-weight: 700;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+/* Scrollback: alternating subtle row tint, like a terminal log */
+.chat-pane__messages {
+  padding: 6px 0;
+}
+
+.chat-msg {
+  padding: 2px 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+}
+
+.chat-msg--user {
+  padding-top: 5px;
+  padding-bottom: 5px;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+}
+
+/* Input area: terminal prompt */
+.chat-pane__input-row {
+  padding: 6px 8px;
+}
+
+.chat-pane__input-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
+.chat-pane__input-wrap:focus-within {
+  border-color: var(--accent);
+}
+
+.chat-pane__input-prefix {
+  color: var(--accent);
+  font-family: "SF Mono", Menlo, "Cascadia Code", monospace;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  padding-top: 3px;
+  margin-right: 6px;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+/* Override the existing textarea rule to strip its own border/bg since the
+   wrapper now provides those. */
+.chat-pane__input-wrap .chat-pane__textarea {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  font-family: "SF Mono", Menlo, "Cascadia Code", monospace;
+  font-size: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-pane__input-wrap .chat-pane__textarea:focus {
+  outline: none;
+  border: none;
+}
+
+.chat-pane__input-wrap .chat-pane__textarea::placeholder {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.diff-view__toggle {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 1px 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.diff-view__toggle:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+/* ── DiffView: mode button group (Stage / Inline / Split) ────────────────── */
+
+.diff-view__mode-btns {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.diff-view__mode-btn {
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 1px 8px;
+  cursor: pointer;
+  line-height: 18px;
+}
+
+.diff-view__mode-btn:last-child {
+  border-right: none;
+}
+
+.diff-view__mode-btn:hover {
+  color: var(--text);
+  background: var(--border);
+}
+
+.diff-view__mode-btn--active {
+  background: var(--border);
+  color: var(--text);
+}
+
+/* ── Stage view: hunk list ───────────────────────────────────────────────── */
+
+.diff-view__stage {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.stage-view {
+  display: flex;
+  flex-direction: column;
+  font-family: "SF Mono", "Cascadia Code", Menlo, monospace;
+  font-size: 12px;
+}
+
+.stage-view__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 60px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.stage-hunk {
+  border-bottom: 1px solid var(--border);
+}
+
+.stage-hunk__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-raised));
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.stage-hunk__range {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: "SF Mono", "Cascadia Code", Menlo, monospace;
+}
+
+.stage-hunk__btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 1px 7px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.stage-hunk__btn:hover:not(:disabled) {
+  border-color: #6abf69;
+  color: #6abf69;
+}
+
+.stage-hunk__btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.stage-hunk__btn--selected {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.stage-hunk__btn--selected:hover:not(:disabled) {
+  border-color: #6abf69;
+  color: #6abf69;
+}
+
+.stage-hunk__lines {
+  display: flex;
+  flex-direction: column;
+}
+
+.stage-line {
+  display: flex;
+  align-items: baseline;
+  min-height: 18px;
+  line-height: 18px;
+}
+
+.stage-line--selectable {
+  cursor: pointer;
+}
+
+.stage-line--selectable:hover {
+  filter: brightness(1.15);
+}
+
+.stage-line--selected {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.stage-line--addition {
+  background: color-mix(in srgb, #6abf69 12%, transparent);
+}
+
+.stage-line--deletion {
+  background: color-mix(in srgb, #e05050 12%, transparent);
+}
+
+.stage-line--context {
+  background: transparent;
+}
+
+.stage-line__gutter {
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+  user-select: none;
+  color: var(--text-dim);
+}
+
+.stage-line--addition .stage-line__gutter {
+  color: #6abf69;
+}
+
+.stage-line--deletion .stage-line__gutter {
+  color: #e05050;
+}
+
+.stage-line__lineno {
+  width: 36px;
+  text-align: right;
+  padding-right: 8px;
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-size: 11px;
+  user-select: none;
+}
+
+.stage-line__content {
+  flex: 1;
+  white-space: pre;
+  overflow: hidden;
+  color: var(--text);
+  padding-right: 8px;
+}
+
+.stage-line--context .stage-line__content {
+  color: var(--text-dim);
+}
+
+.stage-line--addition .stage-line__content {
+  color: #b5e0b4;
+}
+
+.stage-line--deletion .stage-line__content {
+  color: #e09090;
+}

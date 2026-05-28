@@ -1,6 +1,6 @@
 import { useState, useCallback, type ReactNode } from "react";
-import { StoreContext, type AppStore, type Buffer, type ChatMessage, type ProposeEdit } from "./store";
-import type { Project, DirEntry, GitStatus, AgentStatus, Selection, RecentEdit, EditorContext } from "./ipc";
+import { StoreContext, type AppStore, type Buffer, type ChatMessage, type ProposeEdit, type PaneId } from "./store";
+import type { Project, DirEntry, GitStatus, AgentStatus, LspStatus, Selection, RecentEdit, EditorContext, ChatHistory } from "./ipc";
 
 const MAX_RECENT_EDITS = 10;
 
@@ -20,11 +20,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [agentStatus, setAgentStatus] = useState<AgentStatus>({
     state: "stopped",
     project_id: null,
+    session_id: null,
   });
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [activeSelection, setActiveSelection] = useState<Selection | null>(null);
   const [recentEdits, setRecentEdits] = useState<RecentEdit[]>([]);
   const [pendingEdit, setPendingEditState] = useState<ProposeEdit | null>(null);
+  const [lspStatus, setLspStatus] = useState<LspStatus>({
+    state: "stopped",
+    language: null,
+    generation: 0,
+  });
+  const [focusedPane, setFocusedPane] = useState<PaneId>("editor");
 
   const invalidatePath = useCallback((path: string) => {
     setInvalidatedPaths((prev) => new Set(prev).add(path));
@@ -63,12 +70,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }),
       );
       setActiveBufferPath(path);
+      setDiffPath(null); // opening a file leaves any open git diff
     },
     [],
   );
 
   const setActiveBuffer = useCallback((path: string) => {
     setActiveBufferPath(path);
+    setDiffPath(null); // switching tabs leaves any open git diff
   }, []);
 
   const closeBuffer = useCallback(
@@ -89,11 +98,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [buffers],
   );
 
-  const markDirty = useCallback((path: string) => {
+  const updateBuffer = useCallback((path: string, content: string) => {
     setBuffers((prev) => {
       const buf = prev.get(path);
-      if (!buf || buf.dirty) return prev;
-      return new Map(prev).set(path, { ...buf, dirty: true });
+      if (!buf || buf.content === content) return prev;
+      return new Map(prev).set(path, { ...buf, content, dirty: true });
     });
   }, []);
 
@@ -174,6 +183,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     ]);
   }, []);
 
+  const hydrateHistory = useCallback((history: ChatHistory) => {
+    const persisted: ChatMessage[] = history.messages.map((m) => ({
+      runId: -1,
+      kind: m.role === "user" ? "user" : "assistant",
+      text: m.content,
+      streaming: false,
+    }));
+    // Surface the most-recent session summary as a single activity bubble so
+    // the user knows prior context was compressed and re-seeded.
+    const summary = history.summaries[0];
+    const prefix: ChatMessage[] = summary
+      ? [{ runId: -1, kind: "activity", text: "Resumed — prior context summarized", streaming: false }]
+      : [];
+    setChatMessages([...prefix, ...persisted]);
+  }, []);
+
   const pushRecentEdit = useCallback((path: string) => {
     setRecentEdits((prev) => {
       const name = path.split("/").at(-1) ?? path;
@@ -202,6 +227,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setPendingEditState(null);
   }, []);
 
+  const focusPane = useCallback((pane: PaneId) => setFocusedPane(pane), []);
+
   const store: AppStore = {
     project,
     setProject,
@@ -217,7 +244,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     openBuffer,
     setActiveBuffer,
     closeBuffer,
-    markDirty,
+    updateBuffer,
     reconcileBuffer,
     flagExternalChange,
     gitStatus,
@@ -232,6 +259,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     finalizeChatMessage,
     addChatActivity,
     addChatError,
+    hydrateHistory,
     activeSelection,
     setActiveSelection,
     recentEdits,
@@ -240,6 +268,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     pendingEdit,
     setPendingEdit,
     clearPendingEdit,
+    lspStatus,
+    setLspStatus,
+    focusedPane,
+    focusPane,
   };
 
   return (

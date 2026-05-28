@@ -22,6 +22,30 @@ pub async fn open(app: &tauri::AppHandle) -> Result<SqlitePool, sqlx::Error> {
             content_hash TEXT    NOT NULL,
             updated_at   TEXT    NOT NULL,
             UNIQUE(project_id, path)
+        );
+        CREATE TABLE IF NOT EXISTS messages (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL REFERENCES projects(id),
+            session_id TEXT    NOT NULL,
+            role       TEXT    NOT NULL,
+            content    TEXT    NOT NULL,
+            created_at TEXT    NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS agent_events (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL REFERENCES projects(id),
+            agent_id   TEXT    NOT NULL,
+            task_id    TEXT,
+            kind       TEXT    NOT NULL,
+            content    TEXT    NOT NULL,
+            created_at TEXT    NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS session_summaries (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL REFERENCES projects(id),
+            session_id TEXT    NOT NULL,
+            summary    TEXT    NOT NULL,
+            created_at TEXT    NOT NULL
         );",
     )
     .execute(&pool)

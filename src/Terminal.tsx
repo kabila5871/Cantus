@@ -11,7 +11,7 @@ import {
   type CommandError,
 } from "./ipc";
 
-export function Terminal() {
+export function Terminal({ program }: { program?: string } = {}) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,7 +48,7 @@ export function Terminal() {
       termId = null;
     });
 
-    ptySpawn(term.cols, term.rows)
+    ptySpawn(term.cols, term.rows, program)
       .then((spawned) => {
         if (disposed) {
           void ptyKill(spawned.id).catch(() => {});
@@ -89,7 +89,7 @@ export function Terminal() {
       }
       term.dispose();
     };
-  }, []);
+  }, [program]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
 }
