@@ -15,10 +15,11 @@ interface SessionRecord {
   tasks: string[];
 }
 
-function makeSession(n: number): SessionRecord {
+let orchSeq = 0;
+function makeSession(): SessionRecord {
   return {
     id: crypto.randomUUID(),
-    title: `Orchestration ${n}`,
+    title: `Orchestration ${++orchSeq}`,
     goal: "",
     tasks: [""],
   };
@@ -26,10 +27,11 @@ function makeSession(n: number): SessionRecord {
 
 export function OrchestratorView({ visible, onClose }: OrchestratorViewProps) {
   const store = useStore();
-  const [sessions, setSessions] = useState<SessionRecord[]>(() => [makeSession(1)]);
+  const [sessions, setSessions] = useState<SessionRecord[]>(() => [makeSession()]);
   const [activeId, setActiveId] = useState<string | null>(() => sessions[0].id);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [barSlot, setBarSlot] = useState<HTMLDivElement | null>(null);
 
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
@@ -67,6 +69,11 @@ export function OrchestratorView({ visible, onClose }: OrchestratorViewProps) {
         }
       })
       .catch(() => {});
+    const timers = saveTimers.current;
+    return () => {
+      timers.forEach(clearTimeout);
+      timers.clear();
+    };
   }, [store.project]);
 
   const updateSession = (id: string, patch: Partial<Omit<SessionRecord, "id">>) => {
@@ -79,12 +86,17 @@ export function OrchestratorView({ visible, onClose }: OrchestratorViewProps) {
   };
 
   const newSession = () => {
-    const s = makeSession(sessionsRef.current.length + 1);
+    const s = makeSession();
     setSessions((prev) => [...prev, s]);
     setActiveId(s.id);
   };
 
   const closeSession = (id: string) => {
+    const timer = saveTimers.current.get(id);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      saveTimers.current.delete(id);
+    }
     deleteOrchestration(id).catch(() => {});
     setActiveId((cur) => {
       if (cur !== id) return cur;
@@ -159,6 +171,8 @@ export function OrchestratorView({ visible, onClose }: OrchestratorViewProps) {
           + New
         </button>
 
+        <div className="orch-bar__slot" ref={setBarSlot} />
+
         <button className="asset-browser__close" onClick={onClose}>
           &times;
         </button>
@@ -181,6 +195,7 @@ export function OrchestratorView({ visible, onClose }: OrchestratorViewProps) {
                 tasks={s.tasks}
                 onGoalChange={(g) => updateSession(s.id, { goal: g })}
                 onTasksChange={(ts) => updateSession(s.id, { tasks: ts })}
+                barSlot={barSlot}
               />
             </div>
           ))

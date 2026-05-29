@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { planTasks } from "./ipc";
 import { Terminal } from "./Terminal";
 
@@ -8,6 +9,7 @@ interface OrchestrationSessionProps {
   tasks: string[];
   onGoalChange: (g: string) => void;
   onTasksChange: (ts: string[]) => void;
+  barSlot: HTMLElement | null;
 }
 
 type WorkerStatus = "running" | "ended";
@@ -68,6 +70,7 @@ export function OrchestrationSession({
   tasks,
   onGoalChange,
   onTasksChange,
+  barSlot,
 }: OrchestrationSessionProps) {
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [activeKey, setActiveKey] = useState<string | null>(null);
@@ -160,46 +163,44 @@ export function OrchestrationSession({
 
   const phaseIndex = STEPS.findIndex((s) => s.key === phase);
 
+  const barContent = (
+    <>
+      <div className="orch__stepper">
+        {STEPS.map((step, i) => (
+          <span
+            key={step.key}
+            className={
+              "orch__step" +
+              (i < phaseIndex ? " orch__step--done" : "") +
+              (i === phaseIndex ? " orch__step--active" : "")
+            }
+          >
+            {i + 1}&nbsp;{step.label}
+          </span>
+        ))}
+      </div>
+
+      {phase === "compose" && (
+        <button className="orch__primary" onClick={handlePrepare} disabled={!goal.trim()}>
+          Prepare agents &amp; skills
+        </button>
+      )}
+      {phase === "prepare" && (
+        <button
+          className="orch__primary"
+          onClick={handleLaunch}
+          disabled={nonEmptyTasks.length === 0}
+        >
+          Start run ({nonEmptyTasks.length})
+        </button>
+      )}
+      {phase === "run" && <span className="orch__run-chip">Run started</span>}
+    </>
+  );
+
   return (
     <div className="orch">
-      <div className="orch__bar">
-        <div className="orch__stepper">
-          {STEPS.map((step, i) => (
-            <span
-              key={step.key}
-              className={
-                "orch__step" +
-                (i < phaseIndex ? " orch__step--done" : "") +
-                (i === phaseIndex ? " orch__step--active" : "")
-              }
-            >
-              {i + 1}&nbsp;{step.label}
-            </span>
-          ))}
-        </div>
-
-        {phase === "compose" && (
-          <button
-            className="orch__primary"
-            onClick={handlePrepare}
-            disabled={!goal.trim()}
-          >
-            Prepare agents &amp; skills
-          </button>
-        )}
-        {phase === "prepare" && (
-          <button
-            className="orch__primary"
-            onClick={handleLaunch}
-            disabled={nonEmptyTasks.length === 0}
-          >
-            Start run ({nonEmptyTasks.length})
-          </button>
-        )}
-        {phase === "run" && (
-          <span className="orch__run-chip">Run started</span>
-        )}
-      </div>
+      {visible && barSlot && createPortal(barContent, barSlot)}
 
       <div className="orch__body">
         <div className="orch__rail">

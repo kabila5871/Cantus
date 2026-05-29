@@ -39,6 +39,20 @@ function resolveLineRange(
   return null;
 }
 
+// The modified-editor line to anchor a hunk's toolbar on. Use the first changed
+// (added) line rather than hunk.new_start: new_start points at the leading
+// context line, which is exactly where hideUnchangedRegions paints its centered
+// "N hidden lines" fold indicator — anchoring there makes the pill collide with it.
+function hunkAnchorLine(hunk: GitHunk): number {
+  for (const l of hunk.lines) {
+    if (l.origin === "addition" && l.new_lineno !== null) return l.new_lineno;
+  }
+  for (const l of hunk.lines) {
+    if (l.new_lineno !== null) return l.new_lineno;
+  }
+  return hunk.new_start === 0 ? 1 : hunk.new_start;
+}
+
 function makeWidgetBtn(label: string, cls: string, handler: () => void): HTMLButtonElement {
   const btn = document.createElement("button");
   btn.className = cls;
@@ -51,30 +65,43 @@ function makeWidgetBtn(label: string, cls: string, handler: () => void): HTMLBut
   return btn;
 }
 
-// Per-hunk floating toolbar rendered as a ContentWidget on the modified editor.
-class HunkToolbarWidget implements monaco.editor.IContentWidget {
+// Per-hunk toolbar rendered as a self-positioned OverlayWidget: pinned to the
+// editor's right edge (a ContentWidget would track the line's column x, drifting
+// with line length). Its vertical offset tracks the hunk line and is updated on
+// scroll/layout via layout().
+class HunkToolbarWidget implements monaco.editor.IOverlayWidget {
   private domNode: HTMLElement;
-  private position: monaco.editor.IContentWidgetPosition;
   private id: string;
+  readonly line: number;
 
   constructor(index: number, line: number, onStage: () => void, onDiscard: () => void) {
     this.id = `cantus.hunk-toolbar.${index}`;
+    this.line = line;
     this.domNode = document.createElement("div");
     this.domNode.className = "hunk-toolbar";
+    this.domNode.style.position = "absolute";
+    this.domNode.style.right = "14px";
+    this.domNode.style.display = "none"; // shown by layout() once positioned
     this.domNode.appendChild(makeWidgetBtn("✓ Stage", "hunk-toolbar__stage", onStage));
     this.domNode.appendChild(makeWidgetBtn("↺ Discard", "hunk-toolbar__discard", onDiscard));
-    this.position = {
-      position: { lineNumber: line, column: 1 },
-      preference: [
-        monaco.editor.ContentWidgetPositionPreference.ABOVE,
-        monaco.editor.ContentWidgetPositionPreference.BELOW,
-      ],
-    };
   }
 
   getId = () => this.id;
   getDomNode = () => this.domNode;
-  getPosition = () => this.position;
+  getPosition = () => null; // self-positioned; null tells Monaco not to place it
+
+  // Track the hunk line vertically while staying pinned right. Hidden when the
+  // line scrolls out of view.
+  layout(editor: monaco.editor.ICodeEditor) {
+    const pos = editor.getScrolledVisiblePosition({ lineNumber: this.line, column: 1 });
+    const height = editor.getLayoutInfo().height;
+    if (!pos || pos.top < 0 || pos.top > height) {
+      this.domNode.style.display = "none";
+      return;
+    }
+    this.domNode.style.top = `${pos.top}px`;
+    this.domNode.style.display = "flex";
+  }
 }
 
 // Content widget that floats next to the cursor offering "Stage N lines" and "Discard selected".
@@ -157,16 +184,21 @@ export function DiffView() {
     }
   }, [store]);
 
+  // Reposition all hunk toolbars (called on scroll/layout/diff change).
+  const layoutHunkToolbars = useCallback((editor: monaco.editor.ICodeEditor) => {
+    for (const w of hunkWidgetsRef.current) w.layout(editor);
+  }, []);
+
   // Place one HunkToolbarWidget per hunk on the modified editor.
   const syncHunkToolbars = useCallback(
     (editor: monaco.editor.ICodeEditor, d: GitDiff | null, p: string) => {
-      for (const w of hunkWidgetsRef.current) editor.removeContentWidget(w);
+      for (const w of hunkWidgetsRef.current) editor.removeOverlayWidget(w);
       hunkWidgetsRef.current = [];
       if (!d) return;
 
       const lineCount = editor.getModel()?.getLineCount() ?? 0;
       d.hunks.forEach((hunk, hunkIndex) => {
-        const line = Math.max(1, Math.min(hunk.new_start === 0 ? 1 : hunk.new_start, lineCount || 1));
+        const line = Math.max(1, Math.min(hunkAnchorLine(hunk), lineCount || 1));
         const widget = new HunkToolbarWidget(
           hunkIndex,
           line,
@@ -182,11 +214,12 @@ export function DiffView() {
               .catch((err: CommandError) => setError(err.message));
           },
         );
-        editor.addContentWidget(widget);
+        editor.addOverlayWidget(widget);
         hunkWidgetsRef.current.push(widget);
       });
+      layoutHunkToolbars(editor);
     },
-    [afterStage, store],
+    [afterStage, store, layoutHunkToolbars],
   );
 
   // Re-sync toolbar widgets whenever the diff changes (editor already mounted).
@@ -213,6 +246,11 @@ export function DiffView() {
       // so sync toolbar widgets here — the [diff] effect alone runs before the editor
       // exists on first render.
       if (path) syncHunkToolbars(modified, diffRef.current, path);
+
+      // Keep the right-pinned hunk toolbars tracking their lines as the editor
+      // scrolls or relayouts (e.g. fold reveal, pane resize).
+      modified.onDidScrollChange(() => layoutHunkToolbars(modified));
+      modified.onDidLayoutChange(() => layoutHunkToolbars(modified));
 
       // Selection change → show floating "Stage N lines" widget.
       modified.onDidChangeCursorSelection((e) => {
@@ -264,7 +302,7 @@ export function DiffView() {
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [path, store, afterStage, clearWidget, syncHunkToolbars],
+    [path, store, afterStage, clearWidget, syncHunkToolbars, layoutHunkToolbars],
   );
 
   // Clean up widgets when diff view closes.
@@ -272,7 +310,7 @@ export function DiffView() {
     return () => {
       const editor = modifiedEditorRef.current;
       if (editor) {
-        for (const w of hunkWidgetsRef.current) editor.removeContentWidget(w);
+        for (const w of hunkWidgetsRef.current) editor.removeOverlayWidget(w);
       }
       hunkWidgetsRef.current = [];
       clearWidget();

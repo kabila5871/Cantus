@@ -1512,21 +1512,25 @@ body,
 
 /* ── DiffView: per-hunk floating toolbar and selection stage widget ─────────── */
 
-/* Per-hunk toolbar pill (HunkToolbarWidget) */
+/* Per-hunk toolbar pill (HunkToolbarWidget): self-positioned OverlayWidget,
+   pinned to the editor's right edge, vertical offset tracks the hunk line. */
 .hunk-toolbar {
   display: flex;
   flex-direction: row;
-  gap: 4px;
-  padding: 2px 4px;
-  background: var(--glass-strong);
+  align-items: center;
+  gap: 2px;
+  padding: 1px 3px;
+  background: color-mix(in srgb, var(--bg-raised) 92%, transparent);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  z-index: 10;
+  border-radius: 7px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  z-index: 60;
   font-size: 11px;
+  line-height: 1;
   white-space: nowrap;
+  pointer-events: auto;
 }
 
 .hunk-toolbar__stage {
@@ -2040,25 +2044,22 @@ body,
 .orch {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  height: 100%;
   min-height: 0;
   background: var(--bg);
 }
 
-.orch__bar {
+.orch-bar__slot {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 12px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  margin-left: 12px;
 }
 
 .orch__stepper {
   display: flex;
   gap: 4px;
-  flex: 1;
 }
 
 .orch__step {
@@ -2151,6 +2152,31 @@ body,
 .orch__goal:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+.orch__plan-btn {
+  width: 100%;
+  padding: 5px 10px;
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 4px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.orch__plan-btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+.orch__plan-btn:disabled {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-dim);
+  cursor: default;
+  opacity: 0.6;
 }
 
 .orch__tasks {
