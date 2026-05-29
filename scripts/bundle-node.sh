@@ -32,6 +32,8 @@ else
   echo "Downloading Node $NODE_VERSION for darwin-arm64..."
   curl -fsSL "$URL" -o "$TMP/$ARCHIVE"
   tar -xzf "$TMP/$ARCHIVE" -C "$TMP"
+  # The binaries dir is gitignored, so it is absent on a fresh checkout (CI).
+  mkdir -p "$BINARIES_DIR"
   # Remove any dev symlink before placing the real binary.
   rm -f "$DEST"
   cp "$TMP/node-v${NODE_VERSION}-darwin-arm64/bin/node" "$DEST"
