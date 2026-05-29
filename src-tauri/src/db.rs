@@ -46,6 +46,16 @@ pub async fn open(app: &tauri::AppHandle) -> Result<SqlitePool, sqlx::Error> {
             session_id TEXT    NOT NULL,
             summary    TEXT    NOT NULL,
             created_at TEXT    NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS orchestrations (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL REFERENCES projects(id),
+            sid        TEXT    NOT NULL,
+            title      TEXT    NOT NULL,
+            goal       TEXT    NOT NULL,
+            tasks      TEXT    NOT NULL,
+            updated_at INTEGER NOT NULL,
+            UNIQUE(project_id, sid)
         );",
     )
     .execute(&pool)

@@ -5,6 +5,8 @@ mod db;
 mod error;
 mod git;
 mod lsp;
+mod orchestrations;
+mod planner;
 mod pty;
 mod sessions;
 mod state;
@@ -70,7 +72,11 @@ pub fn run() {
             commands::lsp_stop,
             commands::lsp_status,
             sessions::list_sessions,
+            orchestrations::list_orchestrations,
+            orchestrations::save_orchestration,
+            orchestrations::delete_orchestration,
             assets::list_claude_assets,
+            planner::plan_tasks,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Cantus");

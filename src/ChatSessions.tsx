@@ -165,6 +165,7 @@ export function ChatSessions() {
       onSelect={setActiveKey}
       onClose={handleClose}
       onAdd={handleNew}
+      onRename={(key, title) => setTabs((prev) => prev.map((t) => t.key === key ? { ...t, title } : t))}
       onActivePty={handleActivePty}
       emptyState={
         <SessionHistory onNew={handleNew} onResume={handleResume} />

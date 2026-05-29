@@ -215,6 +215,32 @@ export const gitUnstageLines = (path: string, hunkIndex: number, lineIndices: nu
 export const gitDiscardHunk = (path: string, hunkIndex: number): Promise<GitStatus> => invoke("git_discard_hunk", { path, hunkIndex });
 export const gitDiscardLines = (path: string, hunkIndex: number, lineIndices: number[]): Promise<GitStatus> => invoke("git_discard_lines", { path, hunkIndex, lineIndices });
 
+// ── Orchestration seam ───────────────────────────────────────────────────────
+
+export interface Orchestration {
+  id: string;
+  title: string;
+  goal: string;
+  tasks: string[];
+  updated_at: number;
+}
+
+export const listOrchestrations = (): Promise<Orchestration[]> =>
+  invoke("list_orchestrations");
+
+export const saveOrchestration = (o: {
+  id: string;
+  title: string;
+  goal: string;
+  tasks: string[];
+}): Promise<void> => invoke("save_orchestration", { o });
+
+export const deleteOrchestration = (id: string): Promise<void> =>
+  invoke("delete_orchestration", { id });
+
+export const planTasks = (goal: string): Promise<string[]> =>
+  invoke("plan_tasks", { goal });
+
 // ── Agent seam ────────────────────────────────────────────────────────────────
 
 export interface Selection {

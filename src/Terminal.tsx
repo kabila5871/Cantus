@@ -16,9 +16,10 @@ interface TerminalProps {
   args?: string[];
   visible?: boolean;
   onPty?: (id: number) => void;
+  onExit?: () => void;
 }
 
-export function Terminal({ program, args, visible = true, onPty }: TerminalProps) {
+export function Terminal({ program, args, visible = true, onPty, onExit }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const termRef = useRef<XTerm | null>(null);
@@ -61,56 +62,80 @@ export function Terminal({ program, args, visible = true, onPty }: TerminalProps
     });
 
     const unlistenExitP = listenPtyExit((e) => {
-      if (e.id !== termId) return;
+      if (disposed || e.id !== termId) return;
       disposeTerm();
       termId = null;
       termIdRef.current = null;
+      onExit?.();
     });
 
     // Open once JetBrains Mono is loaded (so xterm measures the right cell), then
     // fit + spawn on the NEXT FRAME: this effect runs after React commits but
     // before the browser lays out the container, so measuring synchronously gives
     // a zero-size box and a bogus column count (claude wraps to a sliver).
+    const spawnNow = () => {
+      if (disposed) return;
+      fit.fit();
+
+      ptySpawn(term.cols, term.rows, program, args)
+        .then((spawned) => {
+          if (disposed) {
+            void ptyKill(spawned.id).catch(() => {});
+            return;
+          }
+          termId = spawned.id;
+          termIdRef.current = spawned.id;
+          onPty?.(spawned.id);
+        })
+        .catch((e: CommandError) => {
+          console.error("pty_spawn failed", e.kind, e.message);
+        });
+
+      term.onData((data) => {
+        if (termId === null) return;
+        void ptyWrite(termId, data).catch((e: CommandError) => {
+          console.error("pty_write failed", e.kind, e.message);
+        });
+      });
+
+      ro = new ResizeObserver(() => {
+        fit.fit();
+        if (termId !== null) {
+          void ptyResize(termId, term.cols, term.rows).catch(() => {});
+        }
+      });
+      ro.observe(container);
+    };
+
     const boot = () => {
       if (disposed) return;
       term.open(container);
 
-      requestAnimationFrame(() => {
+      // Spawn only once the pane has stopped GROWING (reached its final width).
+      // claude draws its UI at spawn-time width, and a banner printed while the
+      // pane is still a sliver can't reflow when the pane later grows. Track the
+      // max width seen and spawn once it has held steady (stopped growing).
+      let maxWidth = 0;
+      let sinceGrow = 0;
+      let attempts = 0;
+      const waitForSettle = () => {
         if (disposed) return;
-        fit.fit();
-
-        ptySpawn(term.cols, term.rows, program, args)
-          .then((spawned) => {
-            if (disposed) {
-              void ptyKill(spawned.id).catch(() => {});
-              return;
-            }
-            termId = spawned.id;
-            termIdRef.current = spawned.id;
-            onPty?.(spawned.id);
-            // Container is fully laid out now — push the true size to the pty.
-            fit.fit();
-            void ptyResize(spawned.id, term.cols, term.rows).catch(() => {});
-          })
-          .catch((e: CommandError) => {
-            console.error("pty_spawn failed", e.kind, e.message);
-          });
-
-        term.onData((data) => {
-          if (termId === null) return;
-          void ptyWrite(termId, data).catch((e: CommandError) => {
-            console.error("pty_write failed", e.kind, e.message);
-          });
-        });
-
-        ro = new ResizeObserver(() => {
-          fit.fit();
-          if (termId !== null) {
-            void ptyResize(termId, term.cols, term.rows).catch(() => {});
-          }
-        });
-        ro.observe(container);
-      });
+        const w = container.clientWidth;
+        if (w > maxWidth) {
+          maxWidth = w;
+          sinceGrow = 0;
+        } else {
+          sinceGrow++;
+        }
+        attempts++;
+        // ~250ms with no further growth, or a 5s hard cap.
+        if ((maxWidth > 0 && sinceGrow >= 5) || attempts > 100) {
+          spawnNow();
+        } else {
+          setTimeout(waitForSettle, 50);
+        }
+      };
+      waitForSettle();
     };
 
     const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;
@@ -153,7 +178,7 @@ export function Terminal({ program, args, visible = true, onPty }: TerminalProps
   return (
     <div
       ref={containerRef}
-      style={{ width: "100%", height: "100%", display: visible ? undefined : "none" }}
+      style={{ position: "absolute", inset: 0, display: visible ? undefined : "none" }}
     />
   );
 }

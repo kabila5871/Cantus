@@ -1,183 +1,190 @@
-import { useRef, useState } from "react";
-import { TerminalTabs, type TerminalTabDef } from "./TerminalTabs";
+import { useEffect, useRef, useState } from "react";
+import { OrchestrationSession } from "./OrchestrationSession";
+import { listOrchestrations, saveOrchestration, deleteOrchestration } from "./ipc";
+import { useStore } from "./store";
 
 interface OrchestratorViewProps {
+  visible: boolean;
   onClose(): void;
 }
 
-let workerCounter = 0;
-const newWorkerKey = () => `orch-${++workerCounter}`;
-
-function setupPrompt(goal: string, tasks: string[]): string {
-  const numbered = tasks.map((t, i) => `${i + 1}. ${t}`).join("\n");
-  return `Overall goal: ${goal}
-
-Planned tasks:
-${numbered}
-
-Before any implementation, prepare THIS repository's Claude Code assets so these tasks can be executed well:
-- Create or update the agents (.claude/agents/*.md), skills (.claude/skills/<name>/SKILL.md), and/or workflows (.claude/workflows/*.js) the work needs.
-- If a relevant agent/skill/workflow already EXISTS, modify it to fit rather than creating a duplicate.
-- Keep them minimal and specific to this goal.
-When done, list exactly what you created or modified. Do NOT implement the tasks themselves yet — that happens next in separate worker sessions.`;
+interface SessionRecord {
+  id: string;
+  title: string;
+  goal: string;
+  tasks: string[];
 }
 
-function composePrompt(goal: string, task: string): string {
-  return `Overall goal: ${goal}
-
-Your task: ${task}
-
-Use the project's Claude agents/skills/workflows under .claude/ where helpful — they were prepared for this goal.
-
-Work autonomously in this repository: make the changes needed for your task, then briefly summarize what you changed. Stay scoped to your task.`;
+function makeSession(n: number): SessionRecord {
+  return {
+    id: crypto.randomUUID(),
+    title: `Orchestration ${n}`,
+    goal: "",
+    tasks: [""],
+  };
 }
 
-function shortTitle(task: string, n: number): string {
-  const trimmed = task.trim();
-  if (!trimmed) return `Worker ${n}`;
-  return trimmed.length > 24 ? trimmed.slice(0, 24) + "…" : trimmed;
-}
+export function OrchestratorView({ visible, onClose }: OrchestratorViewProps) {
+  const store = useStore();
+  const [sessions, setSessions] = useState<SessionRecord[]>(() => [makeSession(1)]);
+  const [activeId, setActiveId] = useState<string | null>(() => sessions[0].id);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
 
-export function OrchestratorView({ onClose }: OrchestratorViewProps) {
-  const [goal, setGoal] = useState("");
-  const [tasks, setTasks] = useState<string[]>([""]);
-  const [workers, setWorkers] = useState<TerminalTabDef[]>([]);
-  const [activeKey, setActiveKey] = useState<string | null>(null);
-  const [prepared, setPrepared] = useState(false);
-  const workersRef = useRef(workers);
-  workersRef.current = workers;
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
 
-  const nonEmptyTasks = tasks.filter((t) => t.trim().length > 0);
+  const saveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-  const handlePrepare = () => {
-    if (!goal.trim()) return;
-    const key = newWorkerKey();
-    const tab: TerminalTabDef = {
-      key,
-      title: "Setup · assets",
-      program: "claude",
-      args: [setupPrompt(goal, nonEmptyTasks)],
-    };
-    setWorkers((prev) => [...prev, tab]);
-    setActiveKey(key);
-    setPrepared(true);
+  const scheduleSave = (session: SessionRecord) => {
+    const existing = saveTimers.current.get(session.id);
+    if (existing !== undefined) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      saveTimers.current.delete(session.id);
+      saveOrchestration({
+        id: session.id,
+        title: session.title,
+        goal: session.goal,
+        tasks: session.tasks,
+      }).catch(() => {});
+    }, 400);
+    saveTimers.current.set(session.id, timer);
   };
 
-  const handleLaunch = () => {
-    if (nonEmptyTasks.length === 0 || !prepared) return;
-    const newWorkers: TerminalTabDef[] = nonEmptyTasks.map((task, i) => ({
-      key: newWorkerKey(),
-      title: shortTitle(task, workers.length + i + 1),
-      program: "claude",
-      args: [composePrompt(goal, task)],
-    }));
-    setWorkers((prev) => [...prev, ...newWorkers]);
-    setActiveKey(newWorkers[0].key);
-  };
+  useEffect(() => {
+    listOrchestrations()
+      .then((list) => {
+        if (list.length) {
+          setSessions(
+            list.map((o) => ({
+              id: o.id,
+              title: o.title,
+              goal: o.goal,
+              tasks: o.tasks.length ? o.tasks : [""],
+            })),
+          );
+          setActiveId(list[0].id);
+        }
+      })
+      .catch(() => {});
+  }, [store.project]);
 
-  const handleClose = (key: string) => {
-    const current = workersRef.current;
-    setActiveKey((cur) => {
-      if (cur !== key) return cur;
-      const idx = current.findIndex((w) => w.key === key);
-      const remaining = current.filter((w) => w.key !== key);
-      return (remaining[idx] ?? remaining[idx - 1])?.key ?? null;
-    });
-    setWorkers((prev) => prev.filter((w) => w.key !== key));
-  };
-
-  const handleAdd = () => {
-    const key = newWorkerKey();
-    setWorkers((prev) => [...prev, { key, title: `Worker ${prev.length + 1}`, program: "claude" }]);
-    setActiveKey(key);
-  };
-
-  const updateTask = (idx: number, value: string) => {
-    setTasks((prev) => prev.map((t, i) => (i === idx ? value : t)));
-  };
-
-  const removeTask = (idx: number) => {
-    setTasks((prev) => {
-      const next = prev.filter((_, i) => i !== idx);
-      return next.length === 0 ? [""] : next;
+  const updateSession = (id: string, patch: Partial<Omit<SessionRecord, "id">>) => {
+    setSessions((prev) => {
+      const next = prev.map((s) => (s.id === id ? { ...s, ...patch } : s));
+      const updated = next.find((s) => s.id === id);
+      if (updated) scheduleSave(updated);
+      return next;
     });
   };
 
-  const addTask = () => setTasks((prev) => [...prev, ""]);
+  const newSession = () => {
+    const s = makeSession(sessionsRef.current.length + 1);
+    setSessions((prev) => [...prev, s]);
+    setActiveId(s.id);
+  };
+
+  const closeSession = (id: string) => {
+    deleteOrchestration(id).catch(() => {});
+    setActiveId((cur) => {
+      if (cur !== id) return cur;
+      const current = sessionsRef.current;
+      const idx = current.findIndex((s) => s.id === id);
+      const remaining = current.filter((s) => s.id !== id);
+      return (remaining[idx] ?? remaining[idx - 1])?.id ?? null;
+    });
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const renameSession = (id: string, title: string) => {
+    const trimmed = title.trim();
+    if (trimmed) updateSession(id, { title: trimmed });
+  };
+
+  const commitRename = () => {
+    if (editingId) renameSession(editingId, draft);
+    setEditingId(null);
+  };
+
+  const startRename = (id: string, currentTitle: string) => {
+    setEditingId(id);
+    setDraft(currentTitle);
+  };
 
   return (
-    <div className="orchestrator">
-      <div className="asset-browser__header">
-        <span className="asset-browser__title">Orchestrator</span>
-        <button className="asset-browser__close" onClick={onClose}>
-          ×
-        </button>
-      </div>
+    <div className="orch-manager">
+      <div className="orch-tabs">
+        <span className="orch-title">Orchestrator</span>
 
-      <div className="orchestrator__composer">
-        <textarea
-          className="orchestrator__goal"
-          placeholder="Overall goal…"
-          value={goal}
-          onChange={(e) => setGoal(e.target.value)}
-          rows={3}
-        />
-        <div className="orchestrator__tasks">
-          {tasks.map((task, idx) => (
-            <div key={idx} className="orchestrator__task-row">
-              <input
-                className="orchestrator__task-input"
-                placeholder={`Task ${idx + 1}…`}
-                value={task}
-                onChange={(e) => updateTask(idx, e.target.value)}
-              />
+        <div className="orch-tabs__list">
+          {sessions.map((s) => (
+            <div
+              key={s.id}
+              className={"orch-tab" + (s.id === activeId ? " orch-tab--active" : "")}
+              onClick={() => setActiveId(s.id)}
+              onDoubleClick={() => startRename(s.id, s.title)}
+            >
+              {editingId === s.id ? (
+                <input
+                  className="tab-rename-input"
+                  value={draft}
+                  autoFocus
+                  onChange={(e) => setDraft(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitRename();
+                    if (e.key === "Escape") setEditingId(null);
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <span className="orch-tab__label">{s.title}</span>
+              )}
               <button
-                className="orchestrator__task-remove"
-                onClick={() => removeTask(idx)}
-                title="Remove task"
+                className="orch-tab__close"
+                title="Close session"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeSession(s.id);
+                }}
               >
-                ×
+                &times;
               </button>
             </div>
           ))}
         </div>
-        <div className="orchestrator__actions">
-          <button className="orchestrator__add-task" onClick={addTask}>
-            Add task
-          </button>
-          <button
-            className="orchestrator__launch"
-            onClick={handlePrepare}
-            disabled={!goal.trim() || prepared}
-          >
-            1 · Prepare agents &amp; skills
-          </button>
-          <button
-            className="orchestrator__launch orchestrator__launch--secondary"
-            onClick={handleLaunch}
-            disabled={!prepared || nonEmptyTasks.length === 0}
-          >
-            2 · Start orchestration ({nonEmptyTasks.length})
-          </button>
-        </div>
-        <div className="orchestrator__hint">
-          Prepare first — let Claude create/modify the agents, skills &amp; workflows; then start orchestration.
-        </div>
+
+        <button className="orch-tab__new" onClick={newSession}>
+          + New
+        </button>
+
+        <button className="asset-browser__close" onClick={onClose}>
+          &times;
+        </button>
       </div>
 
-      <div className="orchestrator__board">
-        <TerminalTabs
-          tabs={workers}
-          activeKey={activeKey}
-          onSelect={setActiveKey}
-          onClose={handleClose}
-          onAdd={handleAdd}
-          emptyState={
-            <div className="orchestrator__empty">
-              Set a goal and tasks, click "1 · Prepare" to scaffold Claude assets, then "2 · Start orchestration" to fan out workers.
+      <div className="orch-manager__body">
+        {sessions.length === 0 ? (
+          <div className="orch__empty">
+            No orchestration sessions — + New to start one.
+          </div>
+        ) : (
+          sessions.map((s) => (
+            <div
+              key={s.id}
+              style={{ height: "100%", display: visible && s.id === activeId ? undefined : "none" }}
+            >
+              <OrchestrationSession
+                visible={visible && s.id === activeId}
+                goal={s.goal}
+                tasks={s.tasks}
+                onGoalChange={(g) => updateSession(s.id, { goal: g })}
+                onTasksChange={(ts) => updateSession(s.id, { tasks: ts })}
+              />
             </div>
-          }
-        />
+          ))
+        )}
       </div>
     </div>
   );

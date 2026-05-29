@@ -1510,88 +1510,56 @@ body,
   color: var(--text);
 }
 
-/* ── DiffView: gutter stage glyph (+) and floating stage-lines button ─────── */
+/* ── DiffView: per-hunk floating toolbar and selection stage widget ─────────── */
 
-.diff-gutter-stage-glyph::before {
-  content: "+";
+/* Per-hunk toolbar pill (HunkToolbarWidget) */
+.hunk-toolbar {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--accent);
-  opacity: 0.55;
-  border-radius: 4px;
-  cursor: pointer;
-  transition:
-    opacity 0.12s,
-    background 0.12s,
-    transform 0.12s;
-}
-
-.diff-gutter-stage-glyph:hover::before {
-  opacity: 1;
-  background: var(--accent-soft);
-  transform: scale(1.12);
-}
-
-.diff-gutter-stage-btn {
-  background: var(--accent);
-  border: none;
-  border-radius: 3px;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 1px 8px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.diff-gutter-stage-btn:hover {
-  background: color-mix(in srgb, var(--accent) 80%, white);
-}
-
-.diff-gutter-stage-btn--float {
+  flex-direction: row;
+  gap: 4px;
+  padding: 2px 4px;
   background: var(--glass-strong);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--border-strong);
-  color: var(--accent);
   border-radius: 6px;
-  box-shadow: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
-/* Discard (↺) glyph in the line-decorations gutter — destructive red */
-.diff-gutter-discard-glyph::before {
-  content: "↺";
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1;
-  color: #e05050;
-  opacity: 0.5;
+.hunk-toolbar__stage {
+  background: transparent;
+  border: none;
   border-radius: 4px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
   cursor: pointer;
-  transition:
-    opacity 0.12s,
-    background 0.12s,
-    transform 0.12s;
 }
 
-.diff-gutter-discard-glyph:hover::before {
-  opacity: 1;
+.hunk-toolbar__stage:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.hunk-toolbar__discard {
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #e05050;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.hunk-toolbar__discard:hover {
   background: color-mix(in srgb, #e05050 16%, transparent);
-  transform: scale(1.12);
 }
 
-/* Float widget wrapper — positions the two buttons side by side */
+/* Float widget wrapper for selection-based stage/discard */
 .diff-gutter-float-widget {
   position: absolute;
   z-index: 10;
@@ -1606,25 +1574,34 @@ body,
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
 }
 
-/* Discard button inside the float widget */
-.diff-gutter-discard-btn {
+.diff-gutter-stage-btn--float {
   background: transparent;
   border: none;
-  border-radius: 3px;
-  color: #e05050;
+  border-radius: 4px;
+  color: var(--accent);
   font-size: 11px;
   font-weight: 600;
-  padding: 1px 8px;
+  padding: 2px 8px;
   cursor: pointer;
-  white-space: nowrap;
 }
 
-.diff-gutter-discard-btn:hover {
-  background: color-mix(in srgb, #e05050 16%, transparent);
+.diff-gutter-stage-btn--float:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .diff-gutter-discard-btn--float {
-  /* inherits from .diff-gutter-discard-btn; no additional overrides needed */
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #e05050;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.diff-gutter-discard-btn--float:hover {
+  background: color-mix(in srgb, #e05050 16%, transparent);
 }
 
 /* Landing screen (shown until a folder is opened) */
@@ -2058,9 +2035,9 @@ body,
   color: var(--text);
 }
 
-/* ── Orchestrator view ───────────────────────────────────────────────────── */
+/* ── Orchestrator: mission-control layout ────────────────────────────────── */
 
-.orchestrator {
+.orch {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -2068,103 +2045,41 @@ body,
   background: var(--bg);
 }
 
-.orchestrator__composer {
+.orch__bar {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  background: var(--surface);
 }
 
-.orchestrator__goal {
-  resize: none;
-  background: var(--bg-deep);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text);
-  font-size: 12px;
-  font-family: inherit;
-  padding: 5px 8px;
-  line-height: 1.4;
-  max-height: 64px;
-  overflow-y: auto;
-}
-
-.orchestrator__goal:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-
-.orchestrator__tasks {
+.orch__stepper {
   display: flex;
-  flex-direction: column;
   gap: 4px;
-}
-
-.orchestrator__task-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.orchestrator__task-input {
   flex: 1;
-  background: var(--bg-deep);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text);
-  font-size: 12px;
-  font-family: inherit;
-  padding: 4px 8px;
-  min-width: 0;
 }
 
-.orchestrator__task-input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-
-.orchestrator__task-remove {
-  background: transparent;
-  border: none;
-  color: var(--text-dim);
-  font-size: 16px;
-  cursor: pointer;
-  padding: 0 4px;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.orchestrator__task-remove:hover {
-  color: var(--text);
-}
-
-.orchestrator__actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.orchestrator__add-task {
-  padding: 3px 10px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-dim);
+.orch__step {
   font-size: 11px;
-  font-family: inherit;
-  cursor: pointer;
+  color: var(--text-dim);
+  padding: 2px 8px;
+  border-radius: 4px;
 }
 
-.orchestrator__add-task:hover {
-  color: var(--text);
-  border-color: var(--text-dim);
+.orch__step--done {
+  color: var(--text-dim);
+  text-decoration: line-through;
 }
 
-.orchestrator__launch {
-  margin-left: auto;
+.orch__step--active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.orch__primary {
   padding: 4px 14px;
   background: var(--accent);
   border: none;
@@ -2174,53 +2089,387 @@ body,
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
-.orchestrator__launch:disabled {
+.orch__primary:disabled {
   opacity: 0.4;
   cursor: default;
 }
 
-.orchestrator__launch:not(:disabled):hover {
+.orch__primary:not(:disabled):hover {
   background: color-mix(in srgb, var(--accent) 80%, white);
 }
 
-.orchestrator__launch--secondary {
-  background: var(--surface);
-  border: 1px solid var(--accent);
-  color: var(--accent);
-}
-
-.orchestrator__launch--secondary:not(:disabled):hover {
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
-}
-
-.orchestrator__launch--secondary:disabled {
-  border-color: var(--border);
+.orch__run-chip {
+  font-size: 11px;
   color: var(--text-dim);
-  background: transparent;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  flex-shrink: 0;
 }
 
-.orchestrator__hint {
-  font-size: 10px;
-  color: var(--text-dim);
-  padding: 0 1px;
-  line-height: 1.4;
-}
-
-.orchestrator__board {
+.orch__body {
+  display: flex;
   flex: 1;
   min-height: 0;
 }
 
-.orchestrator__empty {
+.orch__rail {
+  width: 220px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: var(--surface);
+}
+
+.orch__plan {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.orch__goal {
+  resize: none;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 5px 8px;
+  line-height: 1.4;
+  width: 100%;
+}
+
+.orch__goal:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.orch__tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.orch__task-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.orch__task-input {
+  flex: 1;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 3px 7px;
+  min-width: 0;
+}
+
+.orch__task-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.orch__task-remove {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.orch__task-remove:hover {
+  color: var(--text);
+}
+
+.orch__add {
+  align-self: flex-start;
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.orch__add:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.orch__sessions {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0 4px;
+  flex-shrink: 0;
+}
+
+.orch__sessions-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  padding: 0 10px 4px;
+}
+
+.orch__session {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-dim);
+  user-select: none;
+}
+
+.orch__session:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.orch__session--active {
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.orch__session-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orch__session-close {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.orch__session:hover .orch__session-close,
+.orch__session--active .orch__session-close {
+  opacity: 1;
+}
+
+.orch__session-close:hover {
+  color: var(--text);
+}
+
+.orch__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.orch__dot--running {
+  background: var(--accent);
+  box-shadow: 0 0 0 0 var(--accent);
+  animation: orch-pulse 2s ease-in-out infinite;
+}
+
+@keyframes orch-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.orch__dot--ended {
+  background: transparent;
+  border: 1.5px solid var(--text-dim);
+}
+
+.orch__add-worker {
+  margin: 8px 10px;
+  padding: 4px 0;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: center;
+}
+
+.orch__add-worker:hover {
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+
+.orch__detail {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.orch__empty {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 100%;
   color: var(--text-dim);
   font-size: 12px;
-  padding: 20px;
+  padding: 24px;
   text-align: center;
 }
+
+/* ── Orchestrator: session manager (multi-session bar) ───────────────────── */
+
+.orch-manager {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.orch-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 6px 0 12px;
+  height: 32px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.orch-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  margin-right: 10px;
+}
+
+.orch-tabs__list {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.orch-tabs__list::-webkit-scrollbar {
+  height: 2px;
+}
+
+.orch-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px 0 10px;
+  height: 32px;
+  background: transparent;
+  border-right: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.orch-tab:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.orch-tab--active {
+  background: var(--bg);
+  color: var(--text);
+  border-bottom: 2px solid var(--accent);
+}
+
+.orch-tab__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+.orch-tab__close {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.orch-tab:hover .orch-tab__close,
+.orch-tab--active .orch-tab__close {
+  opacity: 1;
+}
+
+.orch-tab__close:hover {
+  color: var(--text);
+}
+
+.orch-tab__new {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-family: inherit;
+  padding: 2px 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin: 0 6px;
+}
+
+.orch-tab__new:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.orch-manager__body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.tab-rename-input {
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  font: inherit;
+  width: 120px;
+  padding: 0 4px;
+  outline: none;
+  border-radius: 2px;
+}
+
+.orch__plan-error { color: #e05050; font-size: 11px; }
 

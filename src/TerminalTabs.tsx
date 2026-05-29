@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Terminal } from "./Terminal";
 
 export interface TerminalTabDef {
@@ -15,6 +15,7 @@ interface TerminalTabsProps {
   onSelect: (key: string) => void;
   onClose: (key: string) => void;
   onAdd: () => void;
+  onRename?: (key: string, title: string) => void;
   onActivePty?: (id: number | null) => void;
   emptyState?: React.ReactNode;
 }
@@ -25,9 +26,12 @@ export function TerminalTabs({
   onSelect,
   onClose,
   onAdd,
+  onRename,
   onActivePty,
   emptyState,
 }: TerminalTabsProps) {
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
   // Map from tab key -> pty id, so we can report the active one.
   const ptyIds = useRef<Map<string, number>>(new Map());
 
@@ -41,6 +45,20 @@ export function TerminalTabs({
     const id = ptyIds.current.get(key) ?? null;
     onActivePty?.(id);
   };
+
+  const startEdit = (e: React.MouseEvent, tab: TerminalTabDef) => {
+    e.stopPropagation();
+    setEditingKey(tab.key);
+    setDraft(tab.title);
+  };
+
+  const commitEdit = (key: string) => {
+    const trimmed = draft.trim();
+    if (trimmed) onRename?.(key, trimmed);
+    setEditingKey(null);
+  };
+
+  const cancelEdit = () => setEditingKey(null);
 
   const handleClose = (e: React.MouseEvent, key: string) => {
     e.stopPropagation();
@@ -58,7 +76,27 @@ export function TerminalTabs({
             className={`tab${tab.key === activeKey ? " tab--active" : ""}`}
             onClick={() => handleSelect(tab.key)}
           >
-            <span className="tab__name">{tab.title}</span>
+            {editingKey === tab.key ? (
+              <input
+                className="tab-rename-input"
+                value={draft}
+                autoFocus
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={() => commitEdit(tab.key)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitEdit(tab.key);
+                  else if (e.key === "Escape") cancelEdit();
+                }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <span
+                className="tab__name"
+                onDoubleClick={(e) => startEdit(e, tab)}
+              >
+                {tab.title}
+              </span>
+            )}
             <button
               className="tab__close"
               title="Close"

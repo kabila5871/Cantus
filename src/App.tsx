@@ -72,6 +72,7 @@ function ShellTerminals() {
       onSelect={setActiveKey}
       onClose={handleClose}
       onAdd={handleAdd}
+      onRename={(key, title) => setTabs((prev) => prev.map((t) => t.key === key ? { ...t, title } : t))}
     />
   );
 }
@@ -243,7 +244,17 @@ function WorkspaceInner({ info }: { info: AppInfo | null }) {
           </Panel>
         </PanelGroup>
 
-        {topView !== "none" && (
+        <div
+          className="workspace-overlay"
+          style={{ display: topView === "orchestrator" ? undefined : "none" }}
+        >
+          <OrchestratorView
+            visible={topView === "orchestrator"}
+            onClose={() => setTopView("none")}
+          />
+        </div>
+
+        {topView !== "none" && topView !== "orchestrator" && (
           <div className="workspace-overlay">
             {topView === "sessions" ? (
               <SessionsView
@@ -253,8 +264,6 @@ function WorkspaceInner({ info }: { info: AppInfo | null }) {
                   setTopView("none");
                 }}
               />
-            ) : topView === "orchestrator" ? (
-              <OrchestratorView onClose={() => setTopView("none")} />
             ) : (
               <AssetBrowser
                 kind={topView}

@@ -39,6 +39,44 @@ function resolveLineRange(
   return null;
 }
 
+function makeWidgetBtn(label: string, cls: string, handler: () => void): HTMLButtonElement {
+  const btn = document.createElement("button");
+  btn.className = cls;
+  btn.textContent = label;
+  btn.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handler();
+  });
+  return btn;
+}
+
+// Per-hunk floating toolbar rendered as a ContentWidget on the modified editor.
+class HunkToolbarWidget implements monaco.editor.IContentWidget {
+  private domNode: HTMLElement;
+  private position: monaco.editor.IContentWidgetPosition;
+  private id: string;
+
+  constructor(index: number, line: number, onStage: () => void, onDiscard: () => void) {
+    this.id = `cantus.hunk-toolbar.${index}`;
+    this.domNode = document.createElement("div");
+    this.domNode.className = "hunk-toolbar";
+    this.domNode.appendChild(makeWidgetBtn("✓ Stage", "hunk-toolbar__stage", onStage));
+    this.domNode.appendChild(makeWidgetBtn("↺ Discard", "hunk-toolbar__discard", onDiscard));
+    this.position = {
+      position: { lineNumber: line, column: 1 },
+      preference: [
+        monaco.editor.ContentWidgetPositionPreference.ABOVE,
+        monaco.editor.ContentWidgetPositionPreference.BELOW,
+      ],
+    };
+  }
+
+  getId = () => this.id;
+  getDomNode = () => this.domNode;
+  getPosition = () => this.position;
+}
+
 // Content widget that floats next to the cursor offering "Stage N lines" and "Discard selected".
 class StageSelectionWidget implements monaco.editor.IContentWidget {
   private domNode: HTMLElement;
@@ -55,23 +93,11 @@ class StageSelectionWidget implements monaco.editor.IContentWidget {
     this.domNode = document.createElement("div");
     this.domNode.className = "diff-gutter-float-widget";
 
-    const makeBtn = (label: string, cls: string, handler: () => void) => {
-      const btn = document.createElement("button");
-      btn.className = cls;
-      btn.textContent = label;
-      btn.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        handler();
-      });
-      return btn;
-    };
-
     this.domNode.appendChild(
-      makeBtn(stageLabel, "diff-gutter-stage-btn diff-gutter-stage-btn--float", onStage),
+      makeWidgetBtn(stageLabel, "diff-gutter-stage-btn--float", onStage),
     );
     this.domNode.appendChild(
-      makeBtn(discardLabel, "diff-gutter-discard-btn diff-gutter-discard-btn--float", onDiscard),
+      makeWidgetBtn(discardLabel, "diff-gutter-discard-btn--float", onDiscard),
     );
 
     this.position = {
@@ -85,15 +111,6 @@ class StageSelectionWidget implements monaco.editor.IContentWidget {
 
   getDomNode = () => this.domNode;
   getPosition = () => this.position;
-  updateLine(line: number) {
-    this.position = {
-      position: { lineNumber: line, column: 1 },
-      preference: [
-        monaco.editor.ContentWidgetPositionPreference.ABOVE,
-        monaco.editor.ContentWidgetPositionPreference.BELOW,
-      ],
-    };
-  }
 }
 
 export function DiffView() {
@@ -104,9 +121,9 @@ export function DiffView() {
   const [mode, setMode] = useState<ViewMode>("split");
 
   // Refs for Monaco integration — not state because mutations must not re-render.
-  const decorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
   const modifiedEditorRef = useRef<monaco.editor.ICodeEditor | null>(null);
   const widgetRef = useRef<StageSelectionWidget | null>(null);
+  const hunkWidgetsRef = useRef<HunkToolbarWidget[]>([]);
   const diffRef = useRef<GitDiff | null>(null);
 
   // Keep diffRef in sync so Monaco callbacks (which close over stale state) can
@@ -140,37 +157,43 @@ export function DiffView() {
     }
   }, [store]);
 
-  // Place a "+" glyph in the gutter at each hunk's start line.
-  const applyDecorations = useCallback(
-    (editor: monaco.editor.ICodeEditor, d: GitDiff | null) => {
-      if (!d) {
-        decorationsRef.current?.clear();
-        return;
-      }
+  // Place one HunkToolbarWidget per hunk on the modified editor.
+  const syncHunkToolbars = useCallback(
+    (editor: monaco.editor.ICodeEditor, d: GitDiff | null, p: string) => {
+      for (const w of hunkWidgetsRef.current) editor.removeContentWidget(w);
+      hunkWidgetsRef.current = [];
+      if (!d) return;
+
       const lineCount = editor.getModel()?.getLineCount() ?? 0;
-      const decos: monaco.editor.IModelDeltaDecoration[] = d.hunks.map((hunk) => {
+      d.hunks.forEach((hunk, hunkIndex) => {
         const line = Math.max(1, Math.min(hunk.new_start === 0 ? 1 : hunk.new_start, lineCount || 1));
-        return {
-          range: new monaco.Range(line, 1, line, 1),
-          options: {
-            glyphMarginClassName: "diff-gutter-stage-glyph",
-            glyphMarginHoverMessage: { value: "Stage hunk" },
-            linesDecorationsClassName: "diff-gutter-discard-glyph",
-            stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+        const widget = new HunkToolbarWidget(
+          hunkIndex,
+          line,
+          () => {
+            void gitStageHunk(p, hunkIndex)
+              .then((status) => { store.setGitStatus(status); return afterStage(p); })
+              .catch((err: CommandError) => setError(err.message));
           },
-        };
+          () => {
+            if (!confirm("Discard changes in this hunk? This cannot be undone.")) return;
+            void gitDiscardHunk(p, hunkIndex)
+              .then((status) => { store.setGitStatus(status); return afterStage(p); })
+              .catch((err: CommandError) => setError(err.message));
+          },
+        );
+        editor.addContentWidget(widget);
+        hunkWidgetsRef.current.push(widget);
       });
-      if (decorationsRef.current) decorationsRef.current.set(decos);
-      else decorationsRef.current = editor.createDecorationsCollection(decos);
     },
-    [],
+    [afterStage, store],
   );
 
-  // Re-apply when the diff changes (only fires once the editor is mounted).
+  // Re-sync toolbar widgets whenever the diff changes (editor already mounted).
   useEffect(() => {
     const editor = modifiedEditorRef.current;
-    if (editor) applyDecorations(editor, diff);
-  }, [diff, applyDecorations]);
+    if (editor && path) syncHunkToolbars(editor, diff, path);
+  }, [diff, path, syncHunkToolbars]);
 
   // Remove the floating stage-lines widget.
   const clearWidget = useCallback(() => {
@@ -186,47 +209,10 @@ export function DiffView() {
       const modified = diffEditor.getModifiedEditor();
       modifiedEditorRef.current = modified;
 
-      // onMount fires after the diff state is already set (and again on each
-      // mode remount), so apply the glyph decorations here — the [diff] effect
-      // alone runs before the editor exists and would miss them.
-      decorationsRef.current = null;
-      applyDecorations(modified, diffRef.current);
-
-      // Glyph-margin click → stage hunk; line-decorations click → discard hunk.
-      modified.onMouseDown((e) => {
-        const isStage = e.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN;
-        const isDiscard = e.target.type === monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS;
-        if ((!isStage && !isDiscard) || !e.target.position) return;
-
-        const clickedLine = e.target.position.lineNumber;
-        const currentDiff = diffRef.current;
-        if (!currentDiff || !path) return;
-
-        const model = modified.getModel();
-        const lineCount = model?.getLineCount() ?? 0;
-        const hunkIndex = currentDiff.hunks.findIndex((hunk) => {
-          const line = Math.max(1, Math.min(hunk.new_start === 0 ? 1 : hunk.new_start, lineCount || 1));
-          return line === clickedLine;
-        });
-        if (hunkIndex === -1) return;
-
-        if (isStage) {
-          void gitStageHunk(path, hunkIndex)
-            .then((status) => {
-              store.setGitStatus(status);
-              return afterStage(path);
-            })
-            .catch((err: CommandError) => setError(err.message));
-        } else {
-          if (!confirm("Discard changes in this hunk? This cannot be undone.")) return;
-          void gitDiscardHunk(path, hunkIndex)
-            .then((status: import("./ipc").GitStatus) => {
-              store.setGitStatus(status);
-              return afterStage(path);
-            })
-            .catch((err: CommandError) => setError(err.message));
-        }
-      });
+      // onMount fires after diff state is already set (and again on each mode remount),
+      // so sync toolbar widgets here — the [diff] effect alone runs before the editor
+      // exists on first render.
+      if (path) syncHunkToolbars(modified, diffRef.current, path);
 
       // Selection change → show floating "Stage N lines" widget.
       modified.onDidChangeCursorSelection((e) => {
@@ -278,15 +264,18 @@ export function DiffView() {
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [path, store, afterStage, clearWidget, applyDecorations],
+    [path, store, afterStage, clearWidget, syncHunkToolbars],
   );
 
-  // Clean up decorations / widget when diff view closes.
+  // Clean up widgets when diff view closes.
   useEffect(() => {
     return () => {
+      const editor = modifiedEditorRef.current;
+      if (editor) {
+        for (const w of hunkWidgetsRef.current) editor.removeContentWidget(w);
+      }
+      hunkWidgetsRef.current = [];
       clearWidget();
-      decorationsRef.current?.clear();
-      decorationsRef.current = null;
       modifiedEditorRef.current = null;
     };
   }, [clearWidget]);
@@ -333,8 +322,6 @@ export function DiffView() {
             options={{
               renderSideBySide: mode === "split",
               readOnly: true,
-              glyphMargin: true,
-              lineDecorationsWidth: 18,
               // Collapse unchanged code to changes + context, like VS Code.
               hideUnchangedRegions: {
                 enabled: true,
@@ -344,7 +331,6 @@ export function DiffView() {
               },
               renderOverviewRuler: true,
               lineNumbers: "on",
-              renderGutterMenu: true,
               fontSize: 13,
               fontFamily: '"JetBrains Mono", monospace',
               minimap: { enabled: false },
