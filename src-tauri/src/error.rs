@@ -16,10 +16,8 @@ pub enum CommandError {
     Pty(String),
     #[error("git error: {0}")]
     Git(String),
-    #[error("agent error: {0}")]
-    Agent(String),
-    #[error("lsp error: {0}")]
-    Lsp(String),
+    #[error("planner error: {0}")]
+    Planner(String),
 }
 
 impl CommandError {
@@ -32,8 +30,7 @@ impl CommandError {
             Self::Db(_) => "db",
             Self::Pty(_) => "pty",
             Self::Git(_) => "git",
-            Self::Agent(_) => "agent",
-            Self::Lsp(_) => "lsp",
+            Self::Planner(_) => "planner",
         }
     }
 }

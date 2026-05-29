@@ -14,25 +14,29 @@
   <b>A lightweight desktop coding environment where Claude is a first-class citizen — not a bolted-on sidebar.</b>
 </p>
 
+<p align="center">
+  <img src="branding/screenshots/workspace.png" alt="The Cantus four-pane workspace — file tree, Monaco editor, integrated terminal, and the Claude agent chat in one window" width="900">
+</p>
+
 ---
 
 ## What is Cantus?
 
-Cantus composes mature, battle-tested components — [Monaco](https://microsoft.github.io/monaco-editor/) for editing, [xterm.js](https://xtermjs.org/) for the terminal, [libgit2](https://libgit2.org/) for version control, and the [Claude Agent SDK](https://docs.claude.com/en/api/agent-sdk/overview) for AI — into **one coherent app** where the agent is natively aware of what you're editing.
+Cantus composes mature, battle-tested components — [Monaco](https://microsoft.github.io/monaco-editor/) for editing, [xterm.js](https://xtermjs.org/) for the terminal, and [libgit2](https://libgit2.org/) for version control — into **one coherent app**, with the [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) CLI running natively in an integrated terminal right beside your editor, git, and file tree.
 
-Built on [Tauri](https://tauri.app/), it ships as a single ~10 MB signed binary with zero external setup. Everything stays on your machine: the only thing that leaves is the agent's own model API calls.
+Built on [Tauri](https://tauri.app/), it ships as a small native binary with zero external setup. Everything stays on your machine: the only thing that leaves is Claude's own model API calls.
 
-> **One thesis:** editing, an integrated terminal, git, and a context-aware Claude agent sharing one UI and one state beats running Cursor and Claude Code side by side.
+> **One thesis:** the `claude` CLI you already use deserves a real IDE around it — editor, terminal, git, and file tree in one window — instead of alt-tabbing between your editor and a lone terminal.
 
 ## Why
 
 Today's tooling forces a compromise:
 
-- **GUI IDEs** treat AI as a panel grafted onto an editor — the agent can't natively see what's open, selected, or recently edited.
-- **Terminal agents** are deeply capable but live in a separate process with no shared UI, no debugger, and a painful setup burden.
-- **Stitching them together** makes *you* the integration layer: editor here, agent there, git in a third window.
+- **Terminal agents** like Claude Code are deeply capable, but live in a bare terminal with no editor, no git UI, and no file tree beside them.
+- **GUI IDEs** bolt AI on as a panel, and you give up the terminal-native agent you actually like.
+- **Stitching them together** makes *you* the integration layer: editor here, Claude in a terminal there, git in a third window.
 
-Cantus closes the gap by making the agent context-aware by default and sharing state across every pane.
+Cantus closes the gap by giving Claude Code a real workspace — editor, terminal, and git sharing one UI and one project.
 
 ## Download
 
@@ -46,14 +50,37 @@ Grab the latest `.dmg` from the [**Releases page**](https://github.com/manan45/C
 ## Features
 
 - 🎛️ **Four-pane workspace** — file tree, Monaco editor, terminal, and Claude, in one resizable window.
-- 🧠 **Context-aware agent** — Claude sees the open file, your selection, and recent edits without copy-paste.
-- ✍️ **Edits as accept/reject diffs** — the agent proposes changes inline in Monaco; you accept or reject.
+- 🖥️ **Claude in a real terminal** — the `claude` CLI runs in a backend-spawned PTY, full-width and resumable.
+- 📎 **Drag files into Claude** — drop any file onto the terminal to drop its path straight into the prompt.
 - 🔍 **VS Code-style diff** — split/inline views with collapsed unchanged regions and per-hunk **and** per-line stage / discard.
-- 🖥️ **Claude in a real terminal** — the agent runs in a backend-spawned PTY, full-width and resumable.
 - 🌿 **Built-in git** — status, branch switcher, stage, commit, and discard — via libgit2, no shelling out.
-- 💾 **Resumable sessions** — chat and agent history persist locally in SQLite; resume with a summary re-seed.
-- 🔒 **Local-first & private** — your source never leaves the machine except as the agent's model calls.
+- 💾 **Resumable sessions** — your Claude sessions for the project, listed and resumable from the chat pane.
+- 🎛️ **Capability-aware task runner** — describe a task; Claude summarizes which skills & agents apply (reuse / compose / build), assembles a `.claude` workflow, and runs it — orchestrating itself.
+- 🧠 **Learned memory** — a local SQLite + FTS5 store distills the quirks each run teaches and relevance-retrieves the right ones into the next run's plan. No cloud, no vector service.
+- 🔒 **Local-first & private** — your source never leaves the machine except as Claude's own model calls.
 - 🎨 **Crafted UI** — deep dark palette, glassmorphism chrome, and JetBrains Mono throughout.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="branding/screenshots/terminal.png" alt="Claude running in a backend-spawned PTY terminal"><br>
+      <sub><b>Claude in a real terminal</b> — the <code>claude</code> CLI in a full-width, resumable PTY.</sub>
+    </td>
+    <td width="50%">
+      <img src="branding/screenshots/diff-view.png" alt="VS Code-style split diff with per-line staging"><br>
+      <sub><b>VS Code-style diff</b> — split / inline views with per-hunk and per-line stage / discard.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="branding/screenshots/orchestrator.png" alt="The capability-aware task runner with its skills/agents panel and learned-memory layer"><br>
+      <sub><b>Task runner</b> — summarize capability coverage, build a <code>.claude</code> workflow, and let Claude run it; a learned-memory layer makes the next run smarter.</sub>
+    </td>
+    <td width="50%"></td>
+  </tr>
+</table>
 
 ## Tech stack
 
@@ -64,7 +91,7 @@ Grab the latest `.dmg` from the [**Releases page**](https://github.com/manan45/C
 | Editor | Monaco |
 | Terminal | xterm.js + PTY |
 | Version control | libgit2 via the `git2` crate |
-| AI | Claude Agent SDK (TypeScript) |
+| AI | the `claude` CLI, in the integrated terminal |
 | Local store | SQLite |
 
 ## Getting started
@@ -100,7 +127,7 @@ npm run check   # tsc --noEmit + cargo clippy (warnings as errors)
 
 ```
 src/            React + TypeScript frontend (the four panes, shared state, IPC bindings)
-src-tauri/      Rust backend (typed IPC commands, git, PTY, SQLite, agent subprocess)
+src-tauri/      Rust backend (typed IPC commands, git, PTY, SQLite)
 branding/       Logo, icon, and banner source
 .github/        CI, release, and the Claude Code GitHub Action
 ```
@@ -109,9 +136,9 @@ The frontend and backend talk **only** through typed Tauri IPC commands and even
 
 ## Roadmap
 
-- **Phase 1 — MVP** *(shipped in v1.0)* — the four-pane shell, context-aware agent, git with hunk/line staging, persistence.
-- **Phase 2 — Depth** — Debug Adapter Protocol (debugging), a skills manager, and subagents.
-- **Phase 3 — Orchestration** — an agent-teams dashboard, saved workflows, multi-project, and cross-platform (Linux, then Windows).
+- **Phase 1 — MVP** *(shipped in v1.0)* — the four-pane shell, Claude in the terminal, git with hunk/line staging, persistence.
+- **Phase 2 — Depth** *(shipped in v1.1)* — tabbed terminals, a Skills / Agents / Workflows / Sessions browser, and quick-open + project search.
+- **Phase 3 — Orchestration** *(landing in v1.1)* — a capability-aware task runner that builds and runs `.claude` workflows, plus a local learned-memory layer. Next: multi-project and cross-platform (Linux, then Windows).
 
 ## Contributing
 

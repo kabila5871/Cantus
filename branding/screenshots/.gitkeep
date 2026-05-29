@@ -1,0 +1,9 @@
+Drop README screenshots here (PNG). Expected filenames (referenced by ../../README.md):
+  workspace.png     — hero: the full four-pane window (file tree + Monaco + terminal + Claude in the terminal)
+  terminal.png      — the `claude` CLI running in the integrated PTY terminal
+  diff-view.png     — the VS Code-style split/inline diff with per-hunk and per-line staging
+  orchestrator.png  — the orchestrator decomposing a goal into parallel terminals
+
+Capture tip (clean single-window shot on macOS):
+  Cmd+Shift+4, then press Space, then click the Cantus window — saves a shadowed PNG to your Desktop.
+  Rename each to the filename above and move it into this folder.

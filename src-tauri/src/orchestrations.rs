@@ -30,11 +30,12 @@ fn now_ms() -> u64 {
 
 #[tauri::command]
 pub async fn list_orchestrations(
+    window: tauri::Window,
     state: State<'_, AppState>,
 ) -> Result<Vec<Orchestration>, CommandError> {
     let project_id = {
         let guard = state.open.lock().unwrap();
-        match guard.as_ref() {
+        match guard.get(window.label()) {
             Some(p) => p.id,
             None => return Ok(vec![]),
         }
@@ -71,6 +72,7 @@ pub async fn list_orchestrations(
 
 #[tauri::command]
 pub async fn save_orchestration(
+    window: tauri::Window,
     state: State<'_, AppState>,
     o: OrchestrationInput,
 ) -> Result<(), CommandError> {
@@ -78,7 +80,7 @@ pub async fn save_orchestration(
         .open
         .lock()
         .unwrap()
-        .as_ref()
+        .get(window.label())
         .map(|p| p.id)
         .ok_or(CommandError::NoProject)?;
 
@@ -109,6 +111,7 @@ pub async fn save_orchestration(
 
 #[tauri::command]
 pub async fn delete_orchestration(
+    window: tauri::Window,
     state: State<'_, AppState>,
     id: String,
 ) -> Result<(), CommandError> {
@@ -116,7 +119,7 @@ pub async fn delete_orchestration(
         .open
         .lock()
         .unwrap()
-        .as_ref()
+        .get(window.label())
         .map(|p| p.id)
         .ok_or(CommandError::NoProject)?;
 

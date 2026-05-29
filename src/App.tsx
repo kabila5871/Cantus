@@ -6,8 +6,6 @@ import {
   openProject,
   listenFsChanged,
   gitStatus,
-  loadHistory,
-  lspStatus,
   type AppInfo,
   type CommandError,
 } from "./ipc";
@@ -25,9 +23,12 @@ import { TopBar, type TopView } from "./TopBar";
 import { AssetBrowser } from "./AssetBrowser";
 import { SessionsView } from "./SessionsView";
 import { OrchestratorView } from "./OrchestratorView";
+import { MemoryView } from "./MemoryView";
 import { TerminalTabs, type TerminalTabDef } from "./TerminalTabs";
 import { ChatSessions } from "./ChatSessions";
 import { ChangesStrip } from "./ChangesStrip";
+import { SearchPanel } from "./SearchPanel";
+import { QuickOpen } from "./QuickOpen";
 import "@xterm/xterm/css/xterm.css";
 import "./App.css";
 
@@ -35,7 +36,7 @@ function Pane({ children }: { children: React.ReactNode }) {
   return <section className="pane">{children}</section>;
 }
 
-type SidebarTab = "explorer" | "git";
+type SidebarTab = "explorer" | "git" | "search";
 
 let shellTabCounter = 0;
 const newShellKey = () => `shell-${++shellTabCounter}`;
@@ -106,6 +107,7 @@ function WorkspaceInner({ info }: { info: AppInfo | null }) {
   const store = useStore();
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("explorer");
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [quickOpenOpen, setQuickOpenOpen] = useState(false);
   const [topView, setTopView] = useState<TopView>("none");
   const chatFocusCbRef = useRef<(() => void) | null>(null);
 
@@ -122,7 +124,7 @@ function WorkspaceInner({ info }: { info: AppInfo | null }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      handleGlobalKeyDown(e, store, () => setPaletteOpen(true), focusChatInput);
+      handleGlobalKeyDown(e, store, () => setPaletteOpen(true), focusChatInput, () => setQuickOpenOpen(true));
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
@@ -131,16 +133,8 @@ function WorkspaceInner({ info }: { info: AppInfo | null }) {
   useEffect(() => {
     void currentProject().then((p) => {
       if (!p) return;
-      store.hydrateHistory({ messages: [], summaries: [] });
       store.setProject(p);
-      loadHistory()
-        .then((h) => store.hydrateHistory(h))
-        .catch((e: { message?: string }) => {
-          store.addChatError(-1, `Failed to load history: ${e.message ?? String(e)}`);
-        });
     });
-
-    void lspStatus().then((s) => store.setLspStatus(s)).catch(() => {});
 
     let unlisten: (() => void) | undefined;
     void listenFsChanged((change) => {
@@ -186,15 +180,15 @@ function WorkspaceInner({ info }: { info: AppInfo | null }) {
 
   return (
     <div className="app">
-      <header className="titlebar">
-        <span className="titlebar__brand">{info?.name ?? "Cantus"}</span>
-        <span className="titlebar__path">
-          {store.project?.root_path ?? "No project open"}
-        </span>
-        {info && <span className="titlebar__version">v{info.version}</span>}
-      </header>
-
-      <TopBar active={topView} onSelect={setTopView} />
+      <TopBar
+        active={topView}
+        onSelect={setTopView}
+        appName={info?.name ?? "Cantus"}
+        version={info?.version}
+        projectPath={store.project?.root_path ?? null}
+        onQuickOpen={() => setQuickOpenOpen(true)}
+        hasProject={!!store.project}
+      />
 
       <div className="workspace-area">
         <PanelGroup direction="horizontal" className="workspace">
@@ -213,9 +207,21 @@ function WorkspaceInner({ info }: { info: AppInfo | null }) {
                 >
                   Git
                 </button>
+                <button
+                  className={`sidebar-tab${sidebarTab === "search" ? " sidebar-tab--active" : ""}`}
+                  onClick={() => setSidebarTab("search")}
+                >
+                  Search
+                </button>
               </div>
               <div className="sidebar-body">
-                {sidebarTab === "explorer" ? <Explorer /> : <GitPanel />}
+                {sidebarTab === "explorer" ? (
+                  <Explorer />
+                ) : sidebarTab === "git" ? (
+                  <GitPanel />
+                ) : (
+                  <SearchPanel />
+                )}
               </div>
             </Pane>
           </Panel>
@@ -264,6 +270,8 @@ function WorkspaceInner({ info }: { info: AppInfo | null }) {
                   setTopView("none");
                 }}
               />
+            ) : topView === "memory" ? (
+              <MemoryView onClose={() => setTopView("none")} />
             ) : (
               <AssetBrowser
                 kind={topView}
@@ -286,6 +294,8 @@ function WorkspaceInner({ info }: { info: AppInfo | null }) {
           focusChatInput={focusChatInput}
         />
       )}
+
+      {quickOpenOpen && <QuickOpen onClose={() => setQuickOpenOpen(false)} />}
     </div>
   );
 }

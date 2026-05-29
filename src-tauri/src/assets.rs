@@ -20,8 +20,16 @@ pub struct ClaudeAssets {
 }
 
 #[tauri::command]
-pub fn list_claude_assets(state: State<'_, AppState>) -> Result<ClaudeAssets, CommandError> {
-    let project_root: Option<PathBuf> = state.open.lock().unwrap().as_ref().map(|p| p.root.clone());
+pub fn list_claude_assets(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<ClaudeAssets, CommandError> {
+    let project_root: Option<PathBuf> = state
+        .open
+        .lock()
+        .unwrap()
+        .get(window.label())
+        .map(|p| p.root.clone());
 
     let home = std::env::var("HOME").unwrap_or_default();
     let user_claude = PathBuf::from(&home).join(".claude");

@@ -14,8 +14,7 @@ pub struct FsChange {
     pub content_hash: Option<String>,
 }
 
-pub fn start(root: PathBuf, app: AppHandle) -> notify::Result<RecommendedWatcher> {
-    // Clone so the closure owns one copy and the watch() call below keeps the other.
+pub fn start(root: PathBuf, app: AppHandle, label: String) -> notify::Result<RecommendedWatcher> {
     let closure_root = root.clone();
     let mut watcher = recommended_watcher(move |res: notify::Result<Event>| {
         let Ok(event) = res else { return };
@@ -31,7 +30,8 @@ pub fn start(root: PathBuf, app: AppHandle) -> notify::Result<RecommendedWatcher
             };
             let path = rel.to_string_lossy().into_owned();
             let content_hash = std::fs::read(&abs).ok().map(|b| hash_hex(&b));
-            let _ = app.emit(
+            let _ = app.emit_to(
+                label.as_str(),
                 "fs://changed",
                 FsChange {
                     path,

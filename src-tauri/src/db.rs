@@ -23,30 +23,6 @@ pub async fn open(app: &tauri::AppHandle) -> Result<SqlitePool, sqlx::Error> {
             updated_at   TEXT    NOT NULL,
             UNIQUE(project_id, path)
         );
-        CREATE TABLE IF NOT EXISTS messages (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            project_id INTEGER NOT NULL REFERENCES projects(id),
-            session_id TEXT    NOT NULL,
-            role       TEXT    NOT NULL,
-            content    TEXT    NOT NULL,
-            created_at TEXT    NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS agent_events (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            project_id INTEGER NOT NULL REFERENCES projects(id),
-            agent_id   TEXT    NOT NULL,
-            task_id    TEXT,
-            kind       TEXT    NOT NULL,
-            content    TEXT    NOT NULL,
-            created_at TEXT    NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS session_summaries (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            project_id INTEGER NOT NULL REFERENCES projects(id),
-            session_id TEXT    NOT NULL,
-            summary    TEXT    NOT NULL,
-            created_at TEXT    NOT NULL
-        );
         CREATE TABLE IF NOT EXISTS orchestrations (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             project_id INTEGER NOT NULL REFERENCES projects(id),
@@ -56,9 +32,56 @@ pub async fn open(app: &tauri::AppHandle) -> Result<SqlitePool, sqlx::Error> {
             tasks      TEXT    NOT NULL,
             updated_at INTEGER NOT NULL,
             UNIQUE(project_id, sid)
+        );
+        CREATE TABLE IF NOT EXISTS capability_stats (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL REFERENCES projects(id),
+            name       TEXT    NOT NULL,
+            kind       TEXT    NOT NULL,
+            uses       INTEGER NOT NULL DEFAULT 0,
+            successes  INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL,
+            UNIQUE(project_id, name, kind)
+        );
+        CREATE TABLE IF NOT EXISTS memories (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id   INTEGER NOT NULL REFERENCES projects(id),
+            fact         TEXT    NOT NULL,
+            task_type    TEXT    NOT NULL DEFAULT '',
+            capabilities TEXT    NOT NULL DEFAULT '[]',
+            retries      INTEGER NOT NULL DEFAULT 0,
+            confidence   REAL    NOT NULL DEFAULT 0.5,
+            created_at   INTEGER NOT NULL
         );",
     )
     .execute(&pool)
     .await?;
+
+    // Relevance retrieval for the learned-memory layer. FTS5 ships in the bundled
+    // SQLite, but guard against a build that lacks it: a failure here just means
+    // memory search degrades to none — it must not block startup.
+    let _ = sqlx::query(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+            fact, task_type, capabilities, content='memories', content_rowid='id'
+        );
+        CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+            INSERT INTO memories_fts(rowid, fact, task_type, capabilities)
+            VALUES (new.id, new.fact, new.task_type, new.capabilities);
+        END;
+        CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+            INSERT INTO memories_fts(memories_fts, rowid, fact, task_type, capabilities)
+            VALUES ('delete', old.id, old.fact, old.task_type, old.capabilities);
+        END;
+        CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+            INSERT INTO memories_fts(memories_fts, rowid, fact, task_type, capabilities)
+            VALUES ('delete', old.id, old.fact, old.task_type, old.capabilities);
+            INSERT INTO memories_fts(rowid, fact, task_type, capabilities)
+            VALUES (new.id, new.fact, new.task_type, new.capabilities);
+        END;
+        INSERT INTO memories_fts(memories_fts) VALUES('rebuild');",
+    )
+    .execute(&pool)
+    .await;
+
     Ok(pool)
 }

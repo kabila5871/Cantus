@@ -17,10 +17,13 @@ pub struct SessionMeta {
 
 /// Claude Code sessions for the open project, newest first.
 #[tauri::command]
-pub fn list_sessions(state: State<'_, AppState>) -> Result<Vec<SessionMeta>, CommandError> {
+pub fn list_sessions(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<Vec<SessionMeta>, CommandError> {
     let root_str = {
         let guard = state.open.lock().unwrap();
-        match guard.as_ref() {
+        match guard.get(window.label()) {
             Some(p) => p.root.to_string_lossy().into_owned(),
             None => return Ok(vec![]),
         }
@@ -121,7 +124,7 @@ fn parse_session_file(path: &Path, id: String, updated_at: u64) -> SessionMeta {
 }
 
 /// Pull a JSON string value for `key` from a raw line, handling simple escapes.
-fn extract_string_field(line: &str, key: &str) -> Option<String> {
+pub(crate) fn extract_string_field(line: &str, key: &str) -> Option<String> {
     let needle = format!("\"{}\":\"", key);
     let start = line.find(&needle)? + needle.len();
     let mut value = String::new();

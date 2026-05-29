@@ -1,11 +1,9 @@
 import { useEffect, useRef, useCallback } from "react";
-import MonacoEditor, { DiffEditor, loader } from "@monaco-editor/react";
+import MonacoEditor, { loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
-import { writeFile, type CommandError, type Selection } from "./ipc";
+import { writeFile, type CommandError } from "./ipc";
 import { useStore } from "./store";
-import { acceptPendingEdit, rejectPendingEdit } from "./keybindings";
 import { langFromPath } from "./lang";
-import { ensurePythonLsp, teardownLsp } from "./lsp";
 import { defineCantusDarkTheme } from "./monacoTheme";
 
 loader.config({ monaco });
@@ -52,95 +50,14 @@ function TabBar() {
   );
 }
 
-function ProposedEditDiff({
-  path,
-  original,
-  newContent,
-}: {
-  path: string;
-  original: string;
-  newContent: string;
-}) {
-  const store = useStore();
-
-  const handleAccept = async () => {
-    const written = await acceptPendingEdit(store);
-    // Reflect the accepted content in the live Monaco model.
-    if (written !== null) {
-      const uri = monaco.Uri.parse(`file:///${path}`);
-      monaco.editor.getModel(uri)?.setValue(written);
-    }
-  };
-
-  return (
-    <div className="proposed-diff">
-      <div className="proposed-diff__header">
-        <span className="proposed-diff__label">Proposed edit — {path.split("/").at(-1)}</span>
-        <div className="proposed-diff__actions">
-          <button className="proposed-diff__accept" onClick={() => void handleAccept()}>
-            Accept
-          </button>
-          <button className="proposed-diff__reject" onClick={() => void rejectPendingEdit(store)}>
-            Reject
-          </button>
-        </div>
-      </div>
-      <div className="proposed-diff__monaco">
-        <DiffEditor
-          theme="cantus-dark"
-          language={langFromPath(path)}
-          original={original}
-          modified={newContent}
-          options={{
-            renderSideBySide: false,
-            readOnly: true,
-            fontSize: 13,
-            fontFamily: '"JetBrains Mono", monospace',
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
 export function EditorPane() {
   const store = useStore();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const prevPathRef = useRef<string | null>(null);
   const modelsRef = useRef<Map<string, monaco.editor.ITextModel>>(new Map());
-  const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lspStartedRef = useRef(false);
 
   const activePath = store.activeBufferPath;
   const activeBuf = activePath ? store.buffers.get(activePath) : undefined;
-
-  // Start LSP when the first Python file opens and a project is loaded.
-  // Tear down when the project changes (project becomes null then re-set).
-  useEffect(() => {
-    if (!store.project) {
-      if (lspStartedRef.current) {
-        lspStartedRef.current = false;
-        void teardownLsp().then(() =>
-          store.setLspStatus({ state: "stopped", language: null, generation: 0 }),
-        );
-      }
-      return;
-    }
-    if (lspStartedRef.current) return;
-    if (activePath && langFromPath(activePath) === "python") {
-      lspStartedRef.current = true;
-      void ensurePythonLsp()
-        .then((s) => store.setLspStatus(s))
-        .catch(() => {
-          lspStartedRef.current = false;
-        });
-    }
-  }, [store.project, activePath]); // eslint-disable-line react-hooks/exhaustive-deps -- store methods stable
-
-  const pendingEdit =
-    store.pendingEdit?.path === activePath ? store.pendingEdit : null;
 
   useEffect(() => {
     if (!activePath || !activeBuf) return;
@@ -171,6 +88,18 @@ export function EditorPane() {
     prevPathRef.current = activePath;
   }, [activePath]);
 
+  // Reveal a line when a search hit navigates to this file.
+  useEffect(() => {
+    const target = store.revealTarget;
+    if (!target || target.path !== activePath) return;
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.revealLineInCenter(target.line);
+    editor.setPosition({ lineNumber: target.line, column: target.column });
+    editor.focus();
+    store.setRevealTarget(null);
+  }, [store.revealTarget, activePath, store]);
+
   useEffect(() => {
     const current = editorRef.current?.getModel() ?? null;
     for (const [path, model] of modelsRef.current) {
@@ -190,27 +119,6 @@ export function EditorPane() {
         if (path) store.updateBuffer(path, editor.getModel()?.getValue() ?? "");
       });
 
-      // Debounced selection capture — snapshot is read at send time, not streamed.
-      editor.onDidChangeCursorSelection((e) => {
-        if (selectionTimerRef.current) clearTimeout(selectionTimerRef.current);
-        selectionTimerRef.current = setTimeout(() => {
-          const sel = e.selection;
-          const model = editor.getModel();
-          if (!model) return;
-          const text = model.getValueInRange(sel);
-          const snapshot: Selection = {
-            start_line: sel.startLineNumber,
-            start_col: sel.startColumn,
-            end_line: sel.endLineNumber,
-            end_col: sel.endColumn,
-            text,
-          };
-          // An empty collapsed cursor is still useful context (line position).
-          store.setActiveSelection(snapshot);
-        }, 150);
-      });
-
-      // Cmd+S → save and push to recent edits.
       editor.addCommand(
         monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
         async () => {
@@ -221,7 +129,6 @@ export function EditorPane() {
           try {
             const entry = await writeFile(path, content);
             store.reconcileBuffer(path, entry.content_hash);
-            store.pushRecentEdit(path);
           } catch (e) {
             const err = e as CommandError;
             console.error("write_file failed", err.kind, err.message);
@@ -236,21 +143,6 @@ export function EditorPane() {
     return (
       <div className="editor-pane editor-pane--empty">
         <span>Open a file from the explorer</span>
-      </div>
-    );
-  }
-
-  if (pendingEdit) {
-    const currentContent =
-      modelsRef.current.get(activePath!)?.getValue() ?? activeBuf.content;
-    return (
-      <div className="editor-pane">
-        <TabBar />
-        <ProposedEditDiff
-          path={pendingEdit.path}
-          original={currentContent}
-          newContent={pendingEdit.new_content}
-        />
       </div>
     );
   }

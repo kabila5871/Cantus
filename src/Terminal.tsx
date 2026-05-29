@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { listen } from "@tauri-apps/api/event";
 import {
   ptySpawn,
   ptyWrite,
@@ -10,6 +11,11 @@ import {
   listenPtyExit,
   type CommandError,
 } from "./ipc";
+
+// Backslash-escape spaces and shell metacharacters — this mirrors what a native
+// terminal inserts on a file drag, which is the form Claude Code's input detects
+// (single-quoting is NOT recognized as a file path by its attachment parser).
+const escapePath = (p: string) => p.replace(/[\s'"\\()$`&;|<>*?[\]{}!#~]/g, (c) => "\\" + c);
 
 interface TerminalProps {
   program?: string;
@@ -145,6 +151,49 @@ export function Terminal({ program, args, visible = true, onPty, onExit }: Termi
       boot();
     }
 
+    // The built-in `tauri://drag-*` events never reached this listener, so the Rust
+    // side (on_window_event) handles the OS drop and re-emits a normal custom event
+    // carrying the absolute path(s) + cursor. Write them into the PTY — the same
+    // thing a native terminal does on a file drag. Route to the terminal under the
+    // cursor; fall back to the focused terminal when coords are ambiguous.
+    type DragPayload = { phase: "over" | "leave" | "drop"; paths: string[]; position: { x: number; y: number } | null };
+    // Accept a drop when the cursor is over this terminal — tested at both physical
+    // and CSS pixel scales because the OS position's scale is unreliable. For the
+    // Claude pane specifically, accept whenever it is the visible terminal: it is the
+    // pane users drag files onto, and the coordinate test alone can't be trusted.
+    const rect = () => container.getBoundingClientRect();
+    const pointInContainer = (pos: { x: number; y: number } | null) => {
+      if (!pos) return false;
+      const r = rect();
+      if (r.width === 0 || r.height === 0) return false;
+      const dpr = window.devicePixelRatio || 1;
+      const hit = (x: number, y: number) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+      return hit(pos.x / dpr, pos.y / dpr) || hit(pos.x, pos.y);
+    };
+    const isVisible = () => rect().width > 0 && rect().height > 0;
+    const isDropTarget = (pos: { x: number; y: number } | null) =>
+      pointInContainer(pos) || (program === "claude" && isVisible());
+
+    const dragUnlistenP = listen<DragPayload>("cantus://drag", (e) => {
+      if (disposed) return;
+      const { phase, paths, position } = e.payload;
+      if (phase === "leave") {
+        container.classList.remove("terminal--drag-over");
+        return;
+      }
+      const target = isDropTarget(position);
+      if (phase === "over") {
+        container.classList.toggle("terminal--drag-over", target);
+        return;
+      }
+      container.classList.remove("terminal--drag-over");
+      if (termId === null || !paths.length || !target) return;
+      term.focus();
+      void ptyWrite(termId, paths.map(escapePath).join(" ") + " ").catch((err: CommandError) =>
+        console.error("pty_write (drop) failed", err.kind, err.message),
+      );
+    });
+
     return () => {
       disposed = true;
       fitRef.current = null;
@@ -153,6 +202,7 @@ export function Terminal({ program, args, visible = true, onPty, onExit }: Termi
       ro?.disconnect();
       void unlistenOutputP.then((fn) => fn());
       void unlistenExitP.then((fn) => fn());
+      void dragUnlistenP.then((fn) => fn()).catch(() => {});
       if (termId !== null) {
         void ptyKill(termId).catch(() => {});
       }

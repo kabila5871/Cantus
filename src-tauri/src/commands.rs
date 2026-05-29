@@ -80,13 +80,50 @@ fn resolve_scoped(root: &Path, rel: &str, must_exist: bool) -> Result<PathBuf, C
 }
 
 fn now_iso() -> String {
-    // std-only RFC-3339-ish timestamp; no chrono dep for a single string.
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    // Format as UTC seconds — good enough for created_at/updated_at storage.
     format!("{secs}")
+}
+
+/// Validate + resolve a single project-relative path against `root`, returning
+/// the root and the validated relative string (forward-slash, no escapes).
+fn scoped_single_path(root: &Path, path: &str) -> Result<(PathBuf, String), CommandError> {
+    let abs = resolve_scoped(root, path, false)?;
+    let rel = abs
+        .strip_prefix(root)
+        .map_err(|_| CommandError::Forbidden(path.to_owned()))?
+        .to_string_lossy()
+        .replace('\\', "/");
+    Ok((root.to_path_buf(), rel))
+}
+
+/// Validate + resolve a slice of project-relative paths against `root`, returning
+/// the root and the validated relative strings (forward-slash, no escapes).
+fn scoped_paths(root: &Path, paths: &[String]) -> Result<(PathBuf, Vec<String>), CommandError> {
+    let mut validated = Vec::with_capacity(paths.len());
+    for p in paths {
+        let abs = resolve_scoped(root, p, false)?;
+        let rel = abs
+            .strip_prefix(root)
+            .map_err(|_| CommandError::Forbidden(p.clone()))?
+            .to_string_lossy()
+            .replace('\\', "/");
+        validated.push(rel);
+    }
+    Ok((root.to_path_buf(), validated))
+}
+
+/// Look up the open project for `label`, returning its root path.
+fn project_root(state: &AppState, label: &str) -> Result<PathBuf, CommandError> {
+    state
+        .open
+        .lock()
+        .unwrap()
+        .get(label)
+        .map(|p| p.root.clone())
+        .ok_or(CommandError::NoProject)
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────────
@@ -100,10 +137,10 @@ pub fn app_info(app: AppHandle) -> AppInfo {
     }
 }
 
-#[tauri::command]
-pub async fn open_project(
-    state: State<'_, AppState>,
-    app: AppHandle,
+pub async fn open_project_for(
+    state: &AppState,
+    app: &AppHandle,
+    label: &str,
     path: String,
 ) -> Result<Project, CommandError> {
     let canonical = Path::new(&path)
@@ -125,14 +162,17 @@ pub async fn open_project(
     .fetch_one(&state.db)
     .await?;
 
-    let watcher =
-        watcher::start(canonical.clone(), app).map_err(|e| CommandError::Io(e.to_string()))?;
+    let watcher = watcher::start(canonical.clone(), app.clone(), label.to_owned())
+        .map_err(|e| CommandError::Io(e.to_string()))?;
 
-    *state.open.lock().unwrap() = Some(OpenProject {
-        id,
-        root: canonical,
-        _watcher: watcher,
-    });
+    state.open.lock().unwrap().insert(
+        label.to_owned(),
+        OpenProject {
+            id,
+            root: canonical,
+            _watcher: watcher,
+        },
+    );
 
     Ok(Project {
         id,
@@ -141,17 +181,36 @@ pub async fn open_project(
 }
 
 #[tauri::command]
-pub fn current_project(state: State<'_, AppState>) -> Option<Project> {
-    state.open.lock().unwrap().as_ref().map(|p| Project {
-        id: p.id,
-        root_path: p.root.to_string_lossy().into_owned(),
-    })
+pub async fn open_project(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    app: AppHandle,
+    path: String,
+) -> Result<Project, CommandError> {
+    open_project_for(&state, &app, window.label(), path).await
 }
 
 #[tauri::command]
-pub fn read_dir(state: State<'_, AppState>, path: String) -> Result<Vec<DirEntry>, CommandError> {
+pub fn current_project(window: tauri::Window, state: State<'_, AppState>) -> Option<Project> {
+    state
+        .open
+        .lock()
+        .unwrap()
+        .get(window.label())
+        .map(|p| Project {
+            id: p.id,
+            root_path: p.root.to_string_lossy().into_owned(),
+        })
+}
+
+#[tauri::command]
+pub fn read_dir(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<Vec<DirEntry>, CommandError> {
     let guard = state.open.lock().unwrap();
-    let open = guard.as_ref().ok_or(CommandError::NoProject)?;
+    let open = guard.get(window.label()).ok_or(CommandError::NoProject)?;
     let target = resolve_scoped(&open.root, &path, true)?;
 
     let mut entries: Vec<DirEntry> = std::fs::read_dir(&target)?
@@ -178,9 +237,13 @@ pub fn read_dir(state: State<'_, AppState>, path: String) -> Result<Vec<DirEntry
 }
 
 #[tauri::command]
-pub fn read_file(state: State<'_, AppState>, path: String) -> Result<FileContent, CommandError> {
+pub fn read_file(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<FileContent, CommandError> {
     let guard = state.open.lock().unwrap();
-    let open = guard.as_ref().ok_or(CommandError::NoProject)?;
+    let open = guard.get(window.label()).ok_or(CommandError::NoProject)?;
     let target = resolve_scoped(&open.root, &path, true)?;
     let bytes = std::fs::read(&target)?;
     let content = String::from_utf8(bytes.clone()).map_err(|e| CommandError::Io(e.to_string()))?;
@@ -192,13 +255,14 @@ pub fn read_file(state: State<'_, AppState>, path: String) -> Result<FileContent
 
 #[tauri::command]
 pub async fn write_file(
+    window: tauri::Window,
     state: State<'_, AppState>,
     path: String,
     content: String,
 ) -> Result<FileEntry, CommandError> {
     let (project_id, target, root) = {
         let guard = state.open.lock().unwrap();
-        let open = guard.as_ref().ok_or(CommandError::NoProject)?;
+        let open = guard.get(window.label()).ok_or(CommandError::NoProject)?;
         let target = resolve_scoped(&open.root, &path, false)?;
         (open.id, target, open.root.clone())
     };
@@ -232,137 +296,265 @@ pub async fn write_file(
     })
 }
 
-// ── History types and command ─────────────────────────────────────────────────
-
-#[derive(Serialize)]
-pub struct HistoryMessage {
-    pub role: String,
-    pub content: String,
-    pub created_at: String,
-}
-
-#[derive(Serialize)]
-pub struct SessionSummary {
-    pub session_id: String,
-    pub summary: String,
-    pub created_at: String,
-}
-
-#[derive(Serialize)]
-pub struct ChatHistory {
-    pub messages: Vec<HistoryMessage>,
-    pub summaries: Vec<SessionSummary>,
+#[tauri::command]
+pub fn create_dir(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<(), CommandError> {
+    let guard = state.open.lock().unwrap();
+    let open = guard.get(window.label()).ok_or(CommandError::NoProject)?;
+    let target = resolve_scoped(&open.root, &path, false)?;
+    std::fs::create_dir_all(&target)?;
+    Ok(())
 }
 
 #[tauri::command]
-pub async fn load_history(state: State<'_, AppState>) -> Result<ChatHistory, CommandError> {
-    let project_id = state
-        .open
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map(|p| p.id)
-        .ok_or(CommandError::NoProject)?;
+pub fn create_file(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<(), CommandError> {
+    let guard = state.open.lock().unwrap();
+    let open = guard.get(window.label()).ok_or(CommandError::NoProject)?;
+    let target = resolve_scoped(&open.root, &path, false)?;
+    if target.exists() {
+        return Err(CommandError::Io(format!("{path} already exists")));
+    }
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&target)?;
+    Ok(())
+}
 
-    let messages = sqlx::query(
-        "SELECT role, content, created_at FROM messages
-         WHERE project_id = ?1
-         ORDER BY created_at ASC, id ASC",
-    )
-    .bind(project_id)
-    .fetch_all(&state.db)
-    .await?
-    .into_iter()
-    .map(|row| {
-        use sqlx::Row;
-        HistoryMessage {
-            role: row.get("role"),
-            content: row.get("content"),
-            created_at: row.get("created_at"),
+#[tauri::command]
+pub fn move_path(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    from: String,
+    to: String,
+) -> Result<(), CommandError> {
+    let guard = state.open.lock().unwrap();
+    let open = guard.get(window.label()).ok_or(CommandError::NoProject)?;
+    let src = resolve_scoped(&open.root, &from, true)?;
+    let dst = resolve_scoped(&open.root, &to, false)?;
+    if dst.exists() {
+        return Err(CommandError::Io(format!("{to} already exists")));
+    }
+    if src.is_dir() && dst.starts_with(&src) {
+        return Err(CommandError::Forbidden(format!(
+            "cannot move {from} into itself"
+        )));
+    }
+    if let Some(parent) = dst.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::rename(&src, &dst)?;
+    Ok(())
+}
+
+#[derive(Serialize)]
+pub struct SearchHit {
+    pub path: String,
+    pub line: u32,
+    pub column: u32,
+    pub text: String,
+}
+
+#[tauri::command]
+pub fn search_in_files(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    query: String,
+) -> Result<Vec<SearchHit>, CommandError> {
+    let root = project_root(&state, window.label())?;
+
+    let needle = query.trim().to_lowercase();
+    if needle.is_empty() {
+        return Ok(vec![]);
+    }
+
+    const MAX_HITS: usize = 500;
+    const MAX_FILE_BYTES: u64 = 2_000_000;
+    const SKIP_DIRS: &[&str] = &[
+        "node_modules",
+        "target",
+        "dist",
+        "build",
+        ".next",
+        ".venv",
+        "__pycache__",
+        ".git",
+    ];
+
+    let mut hits = Vec::new();
+    let mut stack = vec![root.clone()];
+    while let Some(dir) = stack.pop() {
+        if hits.len() >= MAX_HITS {
+            break;
         }
-    })
-    .collect();
-
-    let summaries = sqlx::query(
-        "SELECT session_id, summary, created_at FROM session_summaries
-         WHERE project_id = ?1
-         ORDER BY created_at DESC",
-    )
-    .bind(project_id)
-    .fetch_all(&state.db)
-    .await?
-    .into_iter()
-    .map(|row| {
-        use sqlx::Row;
-        SessionSummary {
-            session_id: row.get("session_id"),
-            summary: row.get("summary"),
-            created_at: row.get("created_at"),
+        let Ok(rd) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in rd.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let Ok(ft) = entry.file_type() else { continue };
+            if ft.is_dir() {
+                if name.starts_with('.') || SKIP_DIRS.contains(&name.as_str()) {
+                    continue;
+                }
+                stack.push(entry.path());
+                continue;
+            }
+            if !ft.is_file() {
+                continue;
+            }
+            if entry.metadata().map(|m| m.len()).unwrap_or(0) > MAX_FILE_BYTES {
+                continue;
+            }
+            let Ok(bytes) = std::fs::read(entry.path()) else {
+                continue;
+            };
+            if bytes.contains(&0) {
+                continue; // binary
+            }
+            let Ok(text) = String::from_utf8(bytes) else {
+                continue;
+            };
+            let path = entry.path();
+            let rel = path
+                .strip_prefix(&root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .into_owned();
+            for (i, line) in text.lines().enumerate() {
+                if let Some(col) = line.to_lowercase().find(&needle) {
+                    hits.push(SearchHit {
+                        path: rel.clone(),
+                        line: (i + 1) as u32,
+                        column: (col + 1) as u32,
+                        text: line.chars().take(400).collect(),
+                    });
+                    if hits.len() >= MAX_HITS {
+                        break;
+                    }
+                }
+            }
         }
-    })
-    .collect();
+    }
+    Ok(hits)
+}
 
-    Ok(ChatHistory {
-        messages,
-        summaries,
-    })
+#[tauri::command]
+pub fn list_files(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, CommandError> {
+    let root = project_root(&state, window.label())?;
+
+    const MAX_FILES: usize = 20_000;
+    const SKIP_DIRS: &[&str] = &[
+        "node_modules",
+        "target",
+        "dist",
+        "build",
+        ".next",
+        ".venv",
+        "__pycache__",
+        ".git",
+    ];
+
+    let mut files = Vec::new();
+    let mut stack = vec![root.clone()];
+    while let Some(dir) = stack.pop() {
+        if files.len() >= MAX_FILES {
+            break;
+        }
+        let Ok(rd) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in rd.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let Ok(ft) = entry.file_type() else { continue };
+            if ft.is_dir() {
+                if name.starts_with('.') || SKIP_DIRS.contains(&name.as_str()) {
+                    continue;
+                }
+                stack.push(entry.path());
+            } else if ft.is_file() {
+                let path = entry.path();
+                files.push(
+                    path.strip_prefix(&root)
+                        .unwrap_or(&path)
+                        .to_string_lossy()
+                        .into_owned(),
+                );
+                if files.len() >= MAX_FILES {
+                    break;
+                }
+            }
+        }
+    }
+    files.sort();
+    Ok(files)
 }
 
 // ── Git commands ──────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub async fn git_status(state: State<'_, AppState>) -> Result<crate::git::GitStatus, CommandError> {
-    let root = state
-        .open
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map(|p| p.root.clone())
-        .ok_or(CommandError::NoProject)?;
+pub async fn git_status(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<crate::git::GitStatus, CommandError> {
+    let root = project_root(&state, window.label())?;
     crate::git::status(&root)
 }
 
 #[tauri::command]
 pub async fn git_stage(
+    window: tauri::Window,
     state: State<'_, AppState>,
     paths: Vec<String>,
 ) -> Result<crate::git::GitStatus, CommandError> {
-    let (root, validated) = scoped_paths(&state, &paths)?;
+    let root = project_root(&state, window.label())?;
+    let (root, validated) = scoped_paths(&root, &paths)?;
     crate::git::stage(&root, &validated)
 }
 
 #[tauri::command]
 pub async fn git_unstage(
+    window: tauri::Window,
     state: State<'_, AppState>,
     paths: Vec<String>,
 ) -> Result<crate::git::GitStatus, CommandError> {
-    let (root, validated) = scoped_paths(&state, &paths)?;
+    let root = project_root(&state, window.label())?;
+    let (root, validated) = scoped_paths(&root, &paths)?;
     crate::git::unstage(&root, &validated)
 }
 
 #[tauri::command]
 pub async fn git_commit(
+    window: tauri::Window,
     state: State<'_, AppState>,
     message: String,
 ) -> Result<crate::git::GitStatus, CommandError> {
-    let root = state
-        .open
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map(|p| p.root.clone())
-        .ok_or(CommandError::NoProject)?;
+    let root = project_root(&state, window.label())?;
     crate::git::commit(&root, &message)
 }
 
 #[tauri::command]
 pub async fn git_diff(
+    window: tauri::Window,
     state: State<'_, AppState>,
     path: String,
 ) -> Result<crate::git::GitDiff, CommandError> {
     let (root, rel) = {
         let guard = state.open.lock().unwrap();
-        let open = guard.as_ref().ok_or(CommandError::NoProject)?;
+        let open = guard.get(window.label()).ok_or(CommandError::NoProject)?;
         let abs = resolve_scoped(&open.root, &path, false)?;
         let rel = abs
             .strip_prefix(&open.root)
@@ -376,236 +568,138 @@ pub async fn git_diff(
 
 #[tauri::command]
 pub async fn git_branches(
+    window: tauri::Window,
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::git::Branch>, CommandError> {
-    let root = state
-        .open
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map(|p| p.root.clone())
-        .ok_or(CommandError::NoProject)?;
+    let root = project_root(&state, window.label())?;
     crate::git::branches(&root)
 }
 
 #[tauri::command]
 pub async fn git_checkout(
+    window: tauri::Window,
     state: State<'_, AppState>,
     name: String,
 ) -> Result<crate::git::GitStatus, CommandError> {
-    let root = state
-        .open
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map(|p| p.root.clone())
-        .ok_or(CommandError::NoProject)?;
+    let root = project_root(&state, window.label())?;
     crate::git::checkout(&root, &name)
 }
 
 #[tauri::command]
 pub async fn git_create_branch(
+    window: tauri::Window,
     state: State<'_, AppState>,
     name: String,
 ) -> Result<crate::git::GitStatus, CommandError> {
-    let root = state
-        .open
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map(|p| p.root.clone())
-        .ok_or(CommandError::NoProject)?;
+    let root = project_root(&state, window.label())?;
     crate::git::create_branch(&root, &name)
 }
 
 #[tauri::command]
 pub async fn git_discard(
+    window: tauri::Window,
     state: State<'_, AppState>,
     paths: Vec<String>,
 ) -> Result<crate::git::GitStatus, CommandError> {
-    let (root, validated) = scoped_paths(&state, &paths)?;
+    let root = project_root(&state, window.label())?;
+    let (root, validated) = scoped_paths(&root, &paths)?;
     crate::git::discard(&root, &validated)
 }
 
 #[tauri::command]
 pub async fn git_stage_hunk(
+    window: tauri::Window,
     state: State<'_, AppState>,
     path: String,
     hunk_index: usize,
 ) -> Result<crate::git::GitStatus, CommandError> {
-    let (root, rel) = scoped_single_path(&state, &path)?;
+    let root = project_root(&state, window.label())?;
+    let (root, rel) = scoped_single_path(&root, &path)?;
     crate::git::stage_hunk(&root, &rel, hunk_index)
 }
 
 #[tauri::command]
 pub async fn git_unstage_hunk(
+    window: tauri::Window,
     state: State<'_, AppState>,
     path: String,
     hunk_index: usize,
 ) -> Result<crate::git::GitStatus, CommandError> {
-    let (root, rel) = scoped_single_path(&state, &path)?;
+    let root = project_root(&state, window.label())?;
+    let (root, rel) = scoped_single_path(&root, &path)?;
     crate::git::unstage_hunk(&root, &rel, hunk_index)
 }
 
 #[tauri::command]
 pub async fn git_stage_lines(
+    window: tauri::Window,
     state: State<'_, AppState>,
     path: String,
     hunk_index: usize,
     line_indices: Vec<usize>,
 ) -> Result<crate::git::GitStatus, CommandError> {
-    let (root, rel) = scoped_single_path(&state, &path)?;
+    let root = project_root(&state, window.label())?;
+    let (root, rel) = scoped_single_path(&root, &path)?;
     crate::git::stage_lines(&root, &rel, hunk_index, &line_indices)
 }
 
 #[tauri::command]
 pub async fn git_unstage_lines(
+    window: tauri::Window,
     state: State<'_, AppState>,
     path: String,
     hunk_index: usize,
     line_indices: Vec<usize>,
 ) -> Result<crate::git::GitStatus, CommandError> {
-    let (root, rel) = scoped_single_path(&state, &path)?;
+    let root = project_root(&state, window.label())?;
+    let (root, rel) = scoped_single_path(&root, &path)?;
     crate::git::unstage_lines(&root, &rel, hunk_index, &line_indices)
 }
 
 #[tauri::command]
 pub async fn git_discard_hunk(
+    window: tauri::Window,
     state: State<'_, AppState>,
     path: String,
     hunk_index: usize,
 ) -> Result<crate::git::GitStatus, CommandError> {
-    let (root, rel) = scoped_single_path(&state, &path)?;
+    let root = project_root(&state, window.label())?;
+    let (root, rel) = scoped_single_path(&root, &path)?;
     crate::git::discard_hunk(&root, &rel, hunk_index)
 }
 
 #[tauri::command]
 pub async fn git_discard_lines(
+    window: tauri::Window,
     state: State<'_, AppState>,
     path: String,
     hunk_index: usize,
     line_indices: Vec<usize>,
 ) -> Result<crate::git::GitStatus, CommandError> {
-    let (root, rel) = scoped_single_path(&state, &path)?;
+    let root = project_root(&state, window.label())?;
+    let (root, rel) = scoped_single_path(&root, &path)?;
     crate::git::discard_lines(&root, &rel, hunk_index, &line_indices)
 }
 
-/// Validate + resolve a single project-relative path, returning the root and
-/// the validated relative string (forward-slash, no escapes).
-fn scoped_single_path(
-    state: &State<'_, AppState>,
-    path: &str,
-) -> Result<(std::path::PathBuf, String), CommandError> {
-    let guard = state.open.lock().unwrap();
-    let open = guard.as_ref().ok_or(CommandError::NoProject)?;
-    let abs = resolve_scoped(&open.root, path, false)?;
-    let rel = abs
-        .strip_prefix(&open.root)
-        .map_err(|_| CommandError::Forbidden(path.to_owned()))?
-        .to_string_lossy()
-        .replace('\\', "/");
-    Ok((open.root.clone(), rel))
-}
-
-/// Validate + resolve a slice of project-relative paths, returning the project
-/// root and the validated relative strings (forward-slash, no escapes).
-fn scoped_paths(
-    state: &State<'_, AppState>,
-    paths: &[String],
-) -> Result<(std::path::PathBuf, Vec<String>), CommandError> {
-    let guard = state.open.lock().unwrap();
-    let open = guard.as_ref().ok_or(CommandError::NoProject)?;
-    let mut validated = Vec::with_capacity(paths.len());
-    for p in paths {
-        let abs = resolve_scoped(&open.root, p, false)?;
-        let rel = abs
-            .strip_prefix(&open.root)
-            .map_err(|_| CommandError::Forbidden(p.clone()))?
-            .to_string_lossy()
-            .replace('\\', "/");
-        validated.push(rel);
-    }
-    Ok((open.root.clone(), validated))
-}
-
-// ── Agent commands ────────────────────────────────────────────────────────────
+// ── New-window command ────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub async fn agent_start(
+pub async fn open_in_new_window(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
-    app: AppHandle,
-) -> Result<crate::agent::AgentStatus, CommandError> {
-    let (project_id, cwd) = {
-        let guard = state.open.lock().unwrap();
-        let open = guard.as_ref().ok_or(CommandError::NoProject)?;
-        (open.id, open.root.clone())
-    };
-    crate::agent::start(state.inner(), app, project_id, cwd)
-}
-
-#[tauri::command]
-pub async fn agent_send(
-    state: State<'_, AppState>,
-    text: String,
-    context: crate::agent::EditorContext,
+    path: String,
 ) -> Result<(), CommandError> {
-    crate::agent::send(&state.agent, text, context)
-}
-
-#[tauri::command]
-pub async fn agent_resolve_edit(
-    state: State<'_, AppState>,
-    edit_id: u32,
-    decision: crate::agent::EditDecision,
-) -> Result<(), CommandError> {
-    crate::agent::resolve_edit(&state.agent, edit_id, decision)
-}
-
-#[tauri::command]
-pub async fn agent_stop(
-    state: State<'_, AppState>,
-) -> Result<crate::agent::AgentStatus, CommandError> {
-    crate::agent::stop(&state.agent)
-}
-
-#[tauri::command]
-pub async fn agent_status(
-    state: State<'_, AppState>,
-) -> Result<crate::agent::AgentStatus, CommandError> {
-    Ok(crate::agent::status(&state.agent))
-}
-
-// ── LSP commands ──────────────────────────────────────────────────────────────
-
-#[tauri::command]
-pub async fn lsp_start(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    language: crate::lsp::LspLanguage,
-) -> Result<crate::lsp::LspStatus, CommandError> {
-    let root = state
-        .open
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map(|p| p.root.to_string_lossy().into_owned())
-        .ok_or(CommandError::NoProject)?;
-    crate::lsp::start(state.inner(), app, language, root)
-}
-
-#[tauri::command]
-pub async fn lsp_send(state: State<'_, AppState>, payload: String) -> Result<(), CommandError> {
-    crate::lsp::send(&state.lsp, payload)
-}
-
-#[tauri::command]
-pub async fn lsp_stop(state: State<'_, AppState>) -> Result<crate::lsp::LspStatus, CommandError> {
-    Ok(crate::lsp::stop(&state.lsp))
-}
-
-#[tauri::command]
-pub fn lsp_status(state: State<'_, AppState>) -> crate::lsp::LspStatus {
-    crate::lsp::status(&state.lsp)
+    use std::sync::atomic::Ordering;
+    let n = state.next_window_id.fetch_add(1, Ordering::Relaxed);
+    let label = format!("win-{n}");
+    open_project_for(&state, &app, &label, path).await?;
+    tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App("index.html".into()))
+        .title("Cantus")
+        .inner_size(1400.0, 900.0)
+        .min_inner_size(900.0, 600.0)
+        .build()
+        .map_err(|e| CommandError::Io(e.to_string()))?;
+    Ok(())
 }
 
 // ── PTY commands ──────────────────────────────────────────────────────────────
@@ -617,6 +711,7 @@ pub struct SpawnedTerminal {
 
 #[tauri::command]
 pub async fn pty_spawn(
+    window: tauri::Window,
     state: State<'_, AppState>,
     app: AppHandle,
     cols: u16,
@@ -624,7 +719,7 @@ pub async fn pty_spawn(
     program: Option<String>,
     args: Option<Vec<String>>,
 ) -> Result<SpawnedTerminal, CommandError> {
-    let id = pty::spawn(&state, app, cols, rows, program, args)?;
+    let id = pty::spawn(&state, app, window.label(), cols, rows, program, args)?;
     Ok(SpawnedTerminal { id })
 }
 

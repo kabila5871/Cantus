@@ -2,12 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   openProject,
+  openInNewWindow,
   writeFile,
   gitCommit,
-  agentSend,
   type CommandError,
 } from "./ipc";
-import { acceptPendingEdit, rejectPendingEdit } from "./keybindings";
 import { useStore, type PaneId } from "./store";
 
 interface PaletteAction {
@@ -21,7 +20,7 @@ interface Props {
   focusChatInput: () => void;
 }
 
-export function CommandPalette({ onClose, focusChatInput }: Props) {
+export function CommandPalette({ onClose }: Props) {
   const store = useStore();
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -45,6 +44,20 @@ export function CommandPalette({ onClose, focusChatInput }: Props) {
       },
     },
     {
+      id: "open-folder-new-window",
+      label: "Open Folder in New Window",
+      run: async () => {
+        const path = await open({ directory: true, multiple: false, title: "Open in New Window" });
+        const selected = Array.isArray(path) ? path[0] : path;
+        if (!selected) return;
+        try {
+          await openInNewWindow(selected);
+        } catch (e) {
+          store.addChatError(-1, `Open in new window failed: ${(e as CommandError).message}`);
+        }
+      },
+    },
+    {
       id: "save",
       label: "Save",
       run: async () => {
@@ -56,7 +69,6 @@ export function CommandPalette({ onClose, focusChatInput }: Props) {
         try {
           const entry = await writeFile(path, buf.content);
           store.reconcileBuffer(path, entry.content_hash);
-          store.pushRecentEdit(path);
         } catch (e) {
           store.addChatError(-1, `Save failed: ${(e as CommandError).message}`);
         }
@@ -95,31 +107,6 @@ export function CommandPalette({ onClose, focusChatInput }: Props) {
       id: "focus-chat",
       label: "Focus Chat",
       run: () => store.focusPane("chat" as PaneId),
-    },
-    {
-      id: "ask-agent",
-      label: "Ask the Agent…",
-      run: async () => {
-        store.focusPane("chat" as PaneId);
-        focusChatInput();
-        const question = prompt("Ask Claude:");
-        if (!question?.trim()) return;
-        try {
-          await agentSend(question.trim(), store.editorContext());
-        } catch (e) {
-          store.addChatError(-1, `Agent send failed: ${(e as CommandError).message}`);
-        }
-      },
-    },
-    {
-      id: "accept-diff",
-      label: "Accept Diff",
-      run: () => acceptPendingEdit(store),
-    },
-    {
-      id: "reject-diff",
-      label: "Reject Diff",
-      run: () => rejectPendingEdit(store),
     },
   ];
 

@@ -1,54 +1,24 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { openProject, writeFile, agentResolveEdit, type CommandError } from "./ipc";
+import { openProject, writeFile, type CommandError } from "./ipc";
 import type { AppStore } from "./store";
-
-// All keyboard actions go through this one handler. The palette calls the same
-// individual helpers so there is no duplication between keybindings and palette.
-
-// Resolve the pending edit, then clear it. If the write fails we must still tell
-// the agent (as "rejected"), or its tool call blocks forever waiting on us.
-// Returns the accepted content on success so the editor can refresh its model.
-export async function acceptPendingEdit(store: AppStore): Promise<string | null> {
-  const edit = store.pendingEdit;
-  if (!edit) return null;
-  let written: string | null = null;
-  try {
-    const entry = await writeFile(edit.path, edit.new_content);
-    store.reconcileBuffer(edit.path, entry.content_hash);
-    written = edit.new_content;
-  } catch (err) {
-    store.addChatError(-1, `Accept failed, edit discarded: ${(err as CommandError).message}`);
-  }
-  try {
-    await agentResolveEdit(edit.edit_id, written ? "accepted" : "rejected");
-  } catch (err) {
-    store.addChatError(-1, `Agent unblock failed: ${(err as CommandError).message}`);
-  }
-  store.clearPendingEdit();
-  return written;
-}
-
-export async function rejectPendingEdit(store: AppStore): Promise<void> {
-  const edit = store.pendingEdit;
-  if (!edit) return;
-  try {
-    await agentResolveEdit(edit.edit_id, "rejected");
-  } catch (err) {
-    store.addChatError(-1, `Reject failed: ${(err as CommandError).message}`);
-  }
-  store.clearPendingEdit();
-}
 
 export function handleGlobalKeyDown(
   e: KeyboardEvent,
   store: AppStore,
   openPalette: () => void,
   focusChatInput: () => void,
+  openQuickOpen: () => void,
 ): void {
   const meta = e.metaKey || e.ctrlKey;
   if (!meta) return;
 
   switch (e.key) {
+    case "p": {
+      e.preventDefault();
+      openQuickOpen();
+      break;
+    }
+
     case "o": {
       e.preventDefault();
       void (async () => {
@@ -78,7 +48,6 @@ export function handleGlobalKeyDown(
         try {
           const entry = await writeFile(path, buf.content);
           store.reconcileBuffer(path, entry.content_hash);
-          store.pushRecentEdit(path);
         } catch (err) {
           store.addChatError(-1, `Save failed: ${(err as CommandError).message}`);
         }
@@ -114,20 +83,6 @@ export function handleGlobalKeyDown(
       e.preventDefault();
       store.focusPane("chat");
       focusChatInput();
-      break;
-    }
-
-    case "Enter": {
-      if (!store.pendingEdit) break;
-      e.preventDefault();
-      void acceptPendingEdit(store);
-      break;
-    }
-
-    case "Backspace": {
-      if (!store.pendingEdit) break;
-      e.preventDefault();
-      void rejectPendingEdit(store);
       break;
     }
   }

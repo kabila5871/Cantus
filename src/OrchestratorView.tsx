@@ -19,7 +19,7 @@ let orchSeq = 0;
 function makeSession(): SessionRecord {
   return {
     id: crypto.randomUUID(),
-    title: `Orchestration ${++orchSeq}`,
+    title: `Task ${++orchSeq}`,
     goal: "",
     tasks: [""],
   };
@@ -31,7 +31,6 @@ export function OrchestratorView({ visible, onClose }: OrchestratorViewProps) {
   const [activeId, setActiveId] = useState<string | null>(() => sessions[0].id);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
-  const [barSlot, setBarSlot] = useState<HTMLDivElement | null>(null);
 
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
@@ -126,7 +125,7 @@ export function OrchestratorView({ visible, onClose }: OrchestratorViewProps) {
   return (
     <div className="orch-manager">
       <div className="orch-tabs">
-        <span className="orch-title">Orchestrator</span>
+        <span className="orch-title">Task runner</span>
 
         <div className="orch-tabs__list">
           {sessions.map((s) => (
@@ -171,8 +170,6 @@ export function OrchestratorView({ visible, onClose }: OrchestratorViewProps) {
           + New
         </button>
 
-        <div className="orch-bar__slot" ref={setBarSlot} />
-
         <button className="asset-browser__close" onClick={onClose}>
           &times;
         </button>
@@ -181,7 +178,7 @@ export function OrchestratorView({ visible, onClose }: OrchestratorViewProps) {
       <div className="orch-manager__body">
         {sessions.length === 0 ? (
           <div className="orch__empty">
-            No orchestration sessions — + New to start one.
+            No task workers — + New to start one.
           </div>
         ) : (
           sessions.map((s) => (
@@ -194,8 +191,8 @@ export function OrchestratorView({ visible, onClose }: OrchestratorViewProps) {
                 goal={s.goal}
                 tasks={s.tasks}
                 onGoalChange={(g) => updateSession(s.id, { goal: g })}
-                onTasksChange={(ts) => updateSession(s.id, { tasks: ts })}
-                barSlot={barSlot}
+                onRename={() => startRename(s.id, s.title)}
+                onClose={() => closeSession(s.id)}
               />
             </div>
           ))

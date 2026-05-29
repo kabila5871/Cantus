@@ -1,10 +1,10 @@
-mod agent;
 mod assets;
+mod capabilities;
 mod commands;
 mod db;
 mod error;
 mod git;
-mod lsp;
+mod memories;
 mod orchestrations;
 mod planner;
 mod pty;
@@ -13,7 +13,7 @@ mod state;
 mod watcher;
 
 use state::AppState;
-use tauri::Manager;
+use tauri::{DragDropEvent, Emitter, Manager, WindowEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -25,13 +25,10 @@ pub fn run() {
                 tauri::async_runtime::block_on(db::open(&handle)).expect("failed to open database");
             app.manage(AppState {
                 db: pool,
-                open: std::sync::Mutex::new(None),
+                open: std::sync::Mutex::new(std::collections::HashMap::new()),
                 terminals: std::sync::Mutex::new(std::collections::HashMap::new()),
                 next_terminal_id: std::sync::atomic::AtomicU32::new(0),
-                agent: std::sync::Mutex::new(None),
-                agent_generation: std::sync::atomic::AtomicU32::new(0),
-                lsp: std::sync::Mutex::new(None),
-                lsp_generation: std::sync::atomic::AtomicU32::new(0),
+                next_window_id: std::sync::atomic::AtomicU32::new(1),
             });
             Ok(())
         })
@@ -42,6 +39,11 @@ pub fn run() {
             commands::read_dir,
             commands::read_file,
             commands::write_file,
+            commands::create_dir,
+            commands::create_file,
+            commands::move_path,
+            commands::search_in_files,
+            commands::list_files,
             commands::pty_spawn,
             commands::pty_write,
             commands::pty_resize,
@@ -61,23 +63,61 @@ pub fn run() {
             commands::git_unstage_lines,
             commands::git_discard_hunk,
             commands::git_discard_lines,
-            commands::agent_start,
-            commands::agent_send,
-            commands::agent_resolve_edit,
-            commands::agent_stop,
-            commands::agent_status,
-            commands::load_history,
-            commands::lsp_start,
-            commands::lsp_send,
-            commands::lsp_stop,
-            commands::lsp_status,
             sessions::list_sessions,
             orchestrations::list_orchestrations,
             orchestrations::save_orchestration,
             orchestrations::delete_orchestration,
             assets::list_claude_assets,
+            capabilities::list_capability_stats,
+            capabilities::record_capability_use,
             planner::plan_tasks,
+            planner::gap_check,
+            memories::list_memories,
+            memories::add_memory,
+            memories::update_memory,
+            memories::delete_memory,
+            memories::distill_memory,
+            commands::open_in_new_window,
         ])
+        // The built-in `tauri://drag-*` events were not reaching the webview
+        // listener, so handle the OS drop here and re-emit a normal custom event
+        // (which the frontend reliably receives) carrying the file paths + cursor.
+        .on_window_event(|window, event| match event {
+            WindowEvent::Destroyed => {
+                window
+                    .state::<AppState>()
+                    .open
+                    .lock()
+                    .unwrap()
+                    .remove(window.label());
+            }
+            WindowEvent::DragDrop(drag) => {
+                let (phase, paths, position): (&str, Vec<std::path::PathBuf>, Option<(f64, f64)>) =
+                    match drag {
+                        DragDropEvent::Enter { paths, position } => {
+                            ("over", paths.clone(), Some((position.x, position.y)))
+                        }
+                        DragDropEvent::Over { position } => {
+                            ("over", Vec::new(), Some((position.x, position.y)))
+                        }
+                        DragDropEvent::Drop { paths, position } => {
+                            ("drop", paths.clone(), Some((position.x, position.y)))
+                        }
+                        DragDropEvent::Leave => ("leave", Vec::new(), None),
+                        _ => return,
+                    };
+                let paths: Vec<String> = paths
+                    .iter()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .collect();
+                let position = position.map(|(x, y)| serde_json::json!({ "x": x, "y": y }));
+                let _ = window.emit(
+                    "cantus://drag",
+                    serde_json::json!({ "phase": phase, "paths": paths, "position": position }),
+                );
+            }
+            _ => {}
+        })
         .run(tauri::generate_context!())
         .expect("error while running Cantus");
 }

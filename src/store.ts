@@ -1,7 +1,5 @@
 import { createContext, useContext } from "react";
-import type { Project, DirEntry, GitStatus, AgentStatus, LspStatus, Selection, RecentEdit, EditorContext, ChatHistory, SessionMeta } from "./ipc";
-
-export type { EditorContext };
+import type { Project, DirEntry, GitStatus, SessionMeta } from "./ipc";
 
 export interface Buffer {
   path: string;
@@ -49,34 +47,6 @@ export interface AppStore {
   openDiff: (path: string) => void;
   closeDiff: () => void;
 
-  // Agent lifecycle mirror.
-  agentStatus: AgentStatus;
-  setAgentStatus: (s: AgentStatus) => void;
-
-  // Chat messages accumulated from agent://event and hydrated from persisted history.
-  chatMessages: ChatMessage[];
-  appendChatDelta: (runId: number, text: string) => void;
-  finalizeChatMessage: (runId: number, role: string, text: string) => void;
-  addChatActivity: (runId: number, line: string) => void;
-  addChatError: (runId: number, message: string) => void;
-  hydrateHistory: (history: ChatHistory) => void;
-
-  // Live editor context for the agent (debounced selection + recent edits).
-  activeSelection: Selection | null;
-  setActiveSelection: (s: Selection | null) => void;
-  recentEdits: RecentEdit[];
-  pushRecentEdit: (path: string) => void;
-  editorContext: () => EditorContext;
-
-  // Agent-proposed edit pending accept/reject.
-  pendingEdit: ProposeEdit | null;
-  setPendingEdit: (edit: ProposeEdit) => void;
-  clearPendingEdit: () => void;
-
-  // LSP lifecycle mirror.
-  lspStatus: LspStatus;
-  setLspStatus: (s: LspStatus) => void;
-
   // Which pane is keyboard-focused.
   focusedPane: PaneId;
   focusPane: (pane: PaneId) => void;
@@ -98,13 +68,14 @@ export interface AppStore {
   // Whether any chat session tab is currently open.
   chatActive: boolean;
   setChatActive: (b: boolean) => void;
-}
 
-export interface ProposeEdit {
-  run_id: number;
-  edit_id: number;
-  path: string;
-  new_content: string;
+  // Error display used by palette / keybinding actions.
+  addChatError: (runId: number, message: string) => void;
+  chatMessages: ChatMessage[];
+
+  // Reveal a specific line in Monaco when a search hit is clicked.
+  revealTarget: { path: string; line: number; column: number } | null;
+  setRevealTarget: (t: { path: string; line: number; column: number } | null) => void;
 }
 
 export type PaneId = "explorer" | "editor" | "terminal" | "chat";
@@ -115,7 +86,6 @@ export interface ChatMessage {
   runId: number;
   kind: ChatMessageKind;
   text: string;
-  // For in-progress streaming assistant messages.
   streaming: boolean;
 }
 

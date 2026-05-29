@@ -10,22 +10,8 @@ export interface CommandError {
     | "db"
     | "pty"
     | "git"
-    | "agent"
-    | "lsp";
+    | "planner";
   message: string;
-}
-
-export type LspLanguage = "python";
-
-export interface LspStatus {
-  state: "running" | "stopped";
-  language: LspLanguage | null;
-  generation: number;
-}
-
-export interface LspMessage {
-  generation: number;
-  payload: string;
 }
 
 export type GitChange =
@@ -124,6 +110,9 @@ export const appInfo = (): Promise<AppInfo> => invoke("app_info");
 export const openProject = (path: string): Promise<Project> =>
   invoke("open_project", { path });
 
+export const openInNewWindow = (path: string): Promise<void> =>
+  invoke("open_in_new_window", { path });
+
 export const currentProject = (): Promise<Project | null> =>
   invoke("current_project");
 
@@ -135,6 +124,27 @@ export const readFile = (path: string): Promise<FileContent> =>
 
 export const writeFile = (path: string, content: string): Promise<FileEntry> =>
   invoke("write_file", { path, content });
+
+export const createDir = (path: string): Promise<void> =>
+  invoke("create_dir", { path });
+
+export const createFile = (path: string): Promise<void> =>
+  invoke("create_file", { path });
+
+export const movePath = (from: string, to: string): Promise<void> =>
+  invoke("move_path", { from, to });
+
+export interface SearchHit {
+  path: string;
+  line: number;
+  column: number;
+  text: string;
+}
+
+export const searchInFiles = (query: string): Promise<SearchHit[]> =>
+  invoke("search_in_files", { query });
+
+export const listFiles = (): Promise<string[]> => invoke("list_files");
 
 export const listenFsChanged = (
   cb: (change: FsChange) => void,
@@ -241,93 +251,71 @@ export const deleteOrchestration = (id: string): Promise<void> =>
 export const planTasks = (goal: string): Promise<string[]> =>
   invoke("plan_tasks", { goal });
 
-// ── Agent seam ────────────────────────────────────────────────────────────────
+// ── Capability memory (learned stats layered on the filesystem registry) ──────
 
-export interface Selection {
-  start_line: number;
-  start_col: number;
-  end_line: number;
-  end_col: number;
-  text: string;
+export type CapabilityKind = "skill" | "agent";
+
+export interface CapabilityStat {
+  name: string;
+  kind: CapabilityKind;
+  uses: number;
+  successes: number;
 }
 
-export interface RecentEdit {
-  path: string;
-  summary: string;
+export const listCapabilityStats = (): Promise<CapabilityStat[]> =>
+  invoke("list_capability_stats");
+
+export const recordCapabilityUse = (
+  name: string,
+  kind: CapabilityKind,
+  success: boolean,
+): Promise<void> => invoke("record_capability_use", { name, kind, success });
+
+export type GapStatus = "reuse" | "new";
+
+export interface GapItem {
+  name: string;
+  kind: CapabilityKind;
+  status: GapStatus;
+  description: string;
 }
 
-export interface EditorContext {
-  active_path: string | null;
-  selection: Selection | null;
-  recent_edits: RecentEdit[];
+export const gapCheck = (
+  goal: string,
+  tasks: string[],
+  skills: string[],
+  agents: string[],
+): Promise<GapItem[]> => invoke("gap_check", { goal, tasks, skills, agents });
+
+// ── Learned memory (distilled facts, relevance-retrieved via SQLite FTS5) ─────
+
+export interface Memory {
+  id: number;
+  fact: string;
+  task_type: string;
+  capabilities: string[];
+  retries: number;
+  confidence: number;
+  created_at: number; // epoch milliseconds
 }
 
-export interface AgentStatus {
-  state: "running" | "stopped";
-  project_id: number | null;
-  session_id: string | null;
-}
+export const listMemories = (): Promise<Memory[]> => invoke("list_memories");
 
-export interface HistoryMessage {
-  role: string;
-  content: string;
-  created_at: string;
-}
+export const addMemory = (
+  fact: string,
+  taskType: string,
+  capabilities: string[],
+  confidence: number,
+): Promise<Memory> => invoke("add_memory", { fact, taskType, capabilities, confidence });
 
-export interface SessionSummary {
-  session_id: string;
-  summary: string;
-  created_at: string;
-}
+export const updateMemory = (id: number, fact: string, confidence: number): Promise<void> =>
+  invoke("update_memory", { id, fact, confidence });
 
-export interface ChatHistory {
-  messages: HistoryMessage[];
-  summaries: SessionSummary[];
-}
+export const deleteMemory = (id: number): Promise<void> => invoke("delete_memory", { id });
 
-export type AgentEvent =
-  | { event: "delta"; run_id: number; text: string }
-  | { event: "message"; run_id: number; role: string; text: string }
-  | { event: "tool"; run_id: number; name: string; input: unknown }
-  | { event: "result"; run_id: number; subtype: string; total_cost_usd: number; num_turns: number }
-  | { event: "error"; run_id: number; message: string }
-  | { event: "status"; state: "running" | "stopped" }
-  | { event: "propose_edit"; run_id: number; edit_id: number; path: string; new_content: string };
+// Distill one durable lesson from a completed run's transcript, reconciled
+// against existing memories. Returns the stored memory, or null if nothing durable.
+export const distillMemory = (goal: string): Promise<Memory | null> =>
+  invoke("distill_memory", { goal });
 
-export const loadHistory = (): Promise<ChatHistory> => invoke("load_history");
 
-export const agentStart = (): Promise<AgentStatus> => invoke("agent_start");
-
-export const agentSend = (text: string, context: EditorContext): Promise<void> =>
-  invoke("agent_send", { text, context });
-
-export const agentResolveEdit = (
-  editId: number,
-  decision: "accepted" | "rejected",
-): Promise<void> => invoke("agent_resolve_edit", { editId, decision });
-
-export const agentStop = (): Promise<AgentStatus> => invoke("agent_stop");
-
-export const agentStatus = (): Promise<AgentStatus> => invoke("agent_status");
-
-export const listenAgentEvent = (
-  cb: (e: AgentEvent) => void,
-): Promise<UnlistenFn> =>
-  listen<AgentEvent>("agent://event", (e) => cb(e.payload));
-
-// ── LSP seam ─────────────────────────────────────────────────────────────────
-
-export const lspStart = (language: LspLanguage): Promise<LspStatus> =>
-  invoke("lsp_start", { language });
-
-export const lspSend = (payload: string): Promise<void> =>
-  invoke("lsp_send", { payload });
-
-export const lspStop = (): Promise<LspStatus> => invoke("lsp_stop");
-
-export const lspStatus = (): Promise<LspStatus> => invoke("lsp_status");
-
-export const listenLspMessage = (
-  cb: (m: LspMessage) => void,
-): Promise<UnlistenFn> =>
-  listen<LspMessage>("lsp-message", (e) => cb(e.payload));

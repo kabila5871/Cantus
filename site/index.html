@@ -6,11 +6,11 @@
     <title>Cantus — a Claude-first coding environment</title>
     <meta
       name="description"
-      content="A lightweight desktop coding environment where Claude is a first-class citizen — Monaco, an integrated terminal, git, and a context-aware Claude agent in one app."
+      content="A lightweight desktop coding environment where Claude is a first-class citizen — Monaco, an integrated terminal running the Claude CLI, and git in one app."
     />
     <link rel="icon" type="image/svg+xml" href="assets/cantus-icon.svg" />
     <meta property="og:title" content="Cantus — a Claude-first coding environment" />
-    <meta property="og:description" content="Editor, terminal, git, and a context-aware Claude agent in one Tauri app. Local-first and private." />
+    <meta property="og:description" content="Editor, an integrated terminal running Claude, and git in one Tauri app. Local-first and private." />
     <meta property="og:image" content="assets/cantus-banner.png" />
     <meta property="og:type" content="website" />
     <style>
@@ -133,15 +133,16 @@
     <section class="block" id="features">
       <div class="wrap">
         <h2>One app, in concert</h2>
-        <p class="sub">Editor, terminal, git, and a context-aware agent sharing one UI and one state.</p>
+        <p class="sub">Editor, terminal, git, and Claude sharing one UI and one project.</p>
         <div class="grid">
-          <div class="card"><div class="ic">🧠</div><h3>Context-aware agent</h3><p>Claude sees the open file, your selection, and recent edits — no copy-paste.</p></div>
-          <div class="card"><div class="ic">✍️</div><h3>Edits as diffs</h3><p>The agent proposes changes inline in Monaco; you accept or reject.</p></div>
-          <div class="card"><div class="ic">🖥️</div><h3>Claude in a real terminal</h3><p>The agent runs in a backend-spawned PTY — full-width, themed, and resumable.</p></div>
+          <div class="card"><div class="ic">🖥️</div><h3>Claude in a real terminal</h3><p>The <code>claude</code> CLI runs in a backend-spawned PTY — full-width, themed, and resumable.</p></div>
+          <div class="card"><div class="ic">📎</div><h3>Drag files into Claude</h3><p>Drop any file onto the terminal to drop its path straight into the prompt.</p></div>
           <div class="card"><div class="ic">🔍</div><h3>VS Code-style diff</h3><p>Split/inline views with per-hunk and per-line stage &amp; discard, on libgit2 patches.</p></div>
           <div class="card"><div class="ic">🌿</div><h3>Built-in git</h3><p>Branch switcher, stage, commit, and discard — via libgit2, no shelling out.</p></div>
-          <div class="card"><div class="ic">💾</div><h3>Resumable sessions</h3><p>Chat and agent history persist locally; resume with a summary re-seed.</p></div>
-          <div class="card"><div class="ic">🔒</div><h3>Local-first &amp; private</h3><p>Your source never leaves the machine except the agent's own model calls.</p></div>
+          <div class="card"><div class="ic">💾</div><h3>Resumable sessions</h3><p>Your Claude sessions for the project, listed and resumable from the chat pane.</p></div>
+          <div class="card"><div class="ic">🎛️</div><h3>Capability-aware task runner</h3><p>Describe a task; Claude summarizes which skills &amp; agents apply, builds a <code>.claude</code> workflow, and runs it — orchestrating itself.</p></div>
+          <div class="card"><div class="ic">🧠</div><h3>Learned memory</h3><p>A local SQLite + FTS5 memory distills the quirks each run teaches and surfaces the relevant ones on the next — no cloud, no vectors.</p></div>
+          <div class="card"><div class="ic">🔒</div><h3>Local-first &amp; private</h3><p>Your source never leaves the machine except Claude's own model calls.</p></div>
         </div>
       </div>
     </section>
@@ -164,7 +165,7 @@
           <span class="chip"><b>xterm.js</b></span>
           <span class="chip"><b>libgit2</b></span>
           <span class="chip"><b>SQLite</b></span>
-          <span class="chip"><b>Claude Agent SDK</b></span>
+          <span class="chip"><b>Claude CLI</b></span>
         </div>
       </div>
     </section>

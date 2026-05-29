@@ -11,9 +11,6 @@ export function StatusBar() {
   const stagedCount = git ? git.entries.filter((e) => e.staged != null).length : 0;
   const changedCount = git ? git.entries.filter((e) => e.unstaged != null).length : 0;
 
-  const agent = store.agentStatus;
-  const lsp = store.lspStatus;
-
   return (
     <div className="status-bar">
       {git && (
@@ -35,22 +32,7 @@ export function StatusBar() {
         </span>
       )}
 
-      {store.pendingEdit && (
-        <span className="status-bar__pending-edit">edit pending</span>
-      )}
-
       <span className="status-bar__spacer" />
-
-      <span
-        className={`status-bar__agent status-bar__agent--${agent.state}`}
-        title={agent.session_id ?? undefined}
-      >
-        Claude {agent.state === "running" ? "running" : "idle"}
-      </span>
-
-      <span className={`status-bar__lsp status-bar__lsp--${lsp.state}`}>
-        {lsp.state === "running" ? `${lsp.language ?? "lsp"} lsp` : "lsp off"}
-      </span>
     </div>
   );
 }

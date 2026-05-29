@@ -20,6 +20,7 @@ struct PtyExit {
 pub fn spawn(
     state: &State<'_, AppState>,
     app: AppHandle,
+    label: &str,
     cols: u16,
     rows: u16,
     program: Option<String>,
@@ -35,9 +36,11 @@ pub fn spawn(
         })
         .map_err(|e| CommandError::Pty(e.to_string()))?;
 
+    // Start the shell/claude in THIS window's project so each window's terminal
+    // operates on its own codebase; fall back to a sensible home dir.
     let cwd = {
         let guard = state.open.lock().unwrap();
-        guard.as_ref().map(|p| p.root.clone()).or_else(dirs_cwd)
+        guard.get(label).map(|p| p.root.clone()).or_else(dirs_cwd)
     };
 
     let mut cmd = match program {
