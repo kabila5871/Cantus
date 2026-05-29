@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { planTasks } from "./ipc";
+import { planTasks, type CommandError } from "./ipc";
 import { Terminal } from "./Terminal";
 
 interface OrchestrationSessionProps {
@@ -146,7 +146,7 @@ export function OrchestrationSession({
       const result = await planTasks(goal);
       onTasksChange(result.length ? result : [""]);
     } catch (e) {
-      setPlanError(e instanceof Error ? e.message : "Planning failed");
+      setPlanError((e as CommandError).message || "Planning failed");
     } finally {
       setPlanning(false);
     }

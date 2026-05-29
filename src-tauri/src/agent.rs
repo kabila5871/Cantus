@@ -636,32 +636,40 @@ fn locate_node(app: &AppHandle) -> Result<std::path::PathBuf, CommandError> {
     Err(CommandError::Agent("node runtime not found".into()))
 }
 
-/// Resolve the agent-host entry point.
+/// Locate the bundled `agent-host` directory.
 ///
-/// In the signed .app bundle it lives in `Contents/Resources/agent-host/index.mjs`
-/// (placed there by the `resources` bundle config). During `tauri dev` we walk up
-/// from the executable until we find the source-tree copy.
-fn locate_host_script(app: &AppHandle) -> Result<std::path::PathBuf, CommandError> {
+/// In the signed .app bundle it lives in `Contents/Resources/agent-host`
+/// (placed there by the `resources` bundle config). During `tauri dev` we walk
+/// up from the executable until we find the source-tree copy. It is identified
+/// by its `index.mjs` entry so we never match an unrelated `agent-host` dir.
+pub(crate) fn agent_host_dir(app: &AppHandle) -> Option<std::path::PathBuf> {
     use tauri::Manager;
-    // Bundle: resources dir contains agent-host/.
     if let Ok(res) = app.path().resource_dir() {
-        let bundled = res.join("agent-host").join("index.mjs");
-        if bundled.exists() {
-            return Ok(bundled);
+        let bundled = res.join("agent-host");
+        if bundled.join("index.mjs").exists() {
+            return Some(bundled);
         }
     }
-    // tauri dev: walk up from the exe to find the workspace copy.
     let mut dir = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()));
     while let Some(d) = dir {
-        let candidate = d.join("agent-host").join("index.mjs");
-        if candidate.exists() {
-            return Ok(candidate);
+        let candidate = d.join("agent-host");
+        if candidate.join("index.mjs").exists() {
+            return Some(candidate);
         }
         dir = d.parent().map(|p| p.to_path_buf());
     }
-    Err(CommandError::Agent(
-        "agent-host/index.mjs not found — run `npm install` in agent-host/".into(),
-    ))
+    None
+}
+
+/// Resolve the agent-host entry point.
+fn locate_host_script(app: &AppHandle) -> Result<std::path::PathBuf, CommandError> {
+    agent_host_dir(app)
+        .map(|d| d.join("index.mjs"))
+        .ok_or_else(|| {
+            CommandError::Agent(
+                "agent-host/index.mjs not found — run `npm install` in agent-host/".into(),
+            )
+        })
 }
