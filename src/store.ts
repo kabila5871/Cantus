@@ -88,6 +88,16 @@ export interface AppStore {
   // Cross-component bridge: session to open/resume in the right-pane chat.
   chatOpenSession: SessionMeta | null;
   setChatOpenSession: (v: SessionMeta | null) => void;
+
+  // Paths Claude changed this session (most-recent first, de-duplicated).
+  agentChanges: string[];
+  noteAgentChange: (path: string) => void;
+  dismissAgentChange: (path: string) => void;
+  clearAgentChanges: () => void;
+
+  // Whether any chat session tab is currently open.
+  chatActive: boolean;
+  setChatActive: (b: boolean) => void;
 }
 
 export interface ProposeEdit {

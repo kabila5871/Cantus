@@ -34,6 +34,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [focusedPane, setFocusedPane] = useState<PaneId>("editor");
   const [chatLaunch, setChatLaunch] = useState<string | null>(null);
   const [chatOpenSession, setChatOpenSessionState] = useState<SessionMeta | null>(null);
+  const [agentChanges, setAgentChanges] = useState<string[]>([]);
+  const [chatActive, setChatActive] = useState(false);
 
   const invalidatePath = useCallback((path: string) => {
     setInvalidatedPaths((prev) => new Set(prev).add(path));
@@ -233,6 +235,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const setChatLaunchCb = useCallback((v: string | null) => setChatLaunch(v), []);
   const setChatOpenSession = useCallback((v: SessionMeta | null) => setChatOpenSessionState(v), []);
 
+  const noteAgentChange = useCallback((path: string) => {
+    setAgentChanges((prev) => [path, ...prev.filter((p) => p !== path)]);
+  }, []);
+
+  const dismissAgentChange = useCallback((path: string) => {
+    setAgentChanges((prev) => prev.filter((p) => p !== path));
+  }, []);
+
+  const clearAgentChanges = useCallback(() => setAgentChanges([]), []);
+  const setChatActiveCb = useCallback((b: boolean) => setChatActive(b), []);
+
   const store: AppStore = {
     project,
     setProject,
@@ -280,6 +293,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setChatLaunch: setChatLaunchCb,
     chatOpenSession,
     setChatOpenSession,
+    agentChanges,
+    noteAgentChange,
+    dismissAgentChange,
+    clearAgentChanges,
+    chatActive,
+    setChatActive: setChatActiveCb,
   };
 
   return (

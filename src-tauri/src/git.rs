@@ -365,7 +365,9 @@ fn collect_hunks(diff: &Diff<'_>) -> Result<Vec<HunkData>, CommandError> {
         }),
         Some(&mut |_, _, line| {
             let idx = cur.get();
-            if idx != usize::MAX {
+            // Only real body lines — skip file/hunk headers ('F'/'H') and binary
+            // markers, which git2 also emits here and would corrupt the patch body.
+            if idx != usize::MAX && matches!(line.origin(), ' ' | '+' | '-') {
                 flat_lines.push((
                     idx,
                     line.origin(),
@@ -456,13 +458,19 @@ fn build_patch(path: &str, hunk: &HunkData, selected: Option<&[usize]>, reverse:
         body.push('\n');
     }
 
-    format!("--- a/{path}\n+++ b/{path}\n@@ -{old_start},{old_count} +{new_start},{new_count} @@\n{body}")
+    // libgit2's patch parser needs the `diff --git` line to establish the file
+    // header; without it the `@@` line is rejected as "outside patch".
+    format!("diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -{old_start},{old_count} +{new_start},{new_count} @@\n{body}")
 }
 
-fn apply_patch(repo: &Repository, patch: &str) -> Result<(), CommandError> {
+fn apply_patch(
+    repo: &Repository,
+    patch: &str,
+    location: ApplyLocation,
+) -> Result<(), CommandError> {
     let d = Diff::from_buffer(patch.as_bytes())
         .map_err(|e| CommandError::Git(e.message().to_owned()))?;
-    repo.apply(&d, ApplyLocation::Index, None)?;
+    repo.apply(&d, location, None)?;
     Ok(())
 }
 
@@ -496,14 +504,22 @@ fn staged_diff_for_path<'repo>(
 pub fn stage_hunk(root: &Path, path: &str, hunk_index: usize) -> Result<GitStatus, CommandError> {
     let repo = open(root)?;
     let hunk = extract_hunk(&unstaged_diff_for_path(&repo, path)?, hunk_index)?;
-    apply_patch(&repo, &build_patch(path, &hunk, None, false))?;
+    apply_patch(
+        &repo,
+        &build_patch(path, &hunk, None, false),
+        ApplyLocation::Index,
+    )?;
     compute_status(&repo)
 }
 
 pub fn unstage_hunk(root: &Path, path: &str, hunk_index: usize) -> Result<GitStatus, CommandError> {
     let repo = open(root)?;
     let hunk = extract_hunk(&staged_diff_for_path(&repo, path)?, hunk_index)?;
-    apply_patch(&repo, &build_patch(path, &hunk, None, true))?;
+    apply_patch(
+        &repo,
+        &build_patch(path, &hunk, None, true),
+        ApplyLocation::Index,
+    )?;
     compute_status(&repo)
 }
 
@@ -515,7 +531,11 @@ pub fn stage_lines(
 ) -> Result<GitStatus, CommandError> {
     let repo = open(root)?;
     let hunk = extract_hunk(&unstaged_diff_for_path(&repo, path)?, hunk_index)?;
-    apply_patch(&repo, &build_patch(path, &hunk, Some(line_indices), false))?;
+    apply_patch(
+        &repo,
+        &build_patch(path, &hunk, Some(line_indices), false),
+        ApplyLocation::Index,
+    )?;
     compute_status(&repo)
 }
 
@@ -527,7 +547,38 @@ pub fn unstage_lines(
 ) -> Result<GitStatus, CommandError> {
     let repo = open(root)?;
     let hunk = extract_hunk(&staged_diff_for_path(&repo, path)?, hunk_index)?;
-    apply_patch(&repo, &build_patch(path, &hunk, Some(line_indices), true))?;
+    apply_patch(
+        &repo,
+        &build_patch(path, &hunk, Some(line_indices), true),
+        ApplyLocation::Index,
+    )?;
+    compute_status(&repo)
+}
+
+pub fn discard_hunk(root: &Path, path: &str, hunk_index: usize) -> Result<GitStatus, CommandError> {
+    let repo = open(root)?;
+    let hunk = extract_hunk(&unstaged_diff_for_path(&repo, path)?, hunk_index)?;
+    apply_patch(
+        &repo,
+        &build_patch(path, &hunk, None, true),
+        ApplyLocation::WorkDir,
+    )?;
+    compute_status(&repo)
+}
+
+pub fn discard_lines(
+    root: &Path,
+    path: &str,
+    hunk_index: usize,
+    line_indices: &[usize],
+) -> Result<GitStatus, CommandError> {
+    let repo = open(root)?;
+    let hunk = extract_hunk(&unstaged_diff_for_path(&repo, path)?, hunk_index)?;
+    apply_patch(
+        &repo,
+        &build_patch(path, &hunk, Some(line_indices), true),
+        ApplyLocation::WorkDir,
+    )?;
     compute_status(&repo)
 }
 
@@ -538,6 +589,10 @@ pub fn diff(root: &Path, path: &str) -> Result<GitDiff, CommandError> {
 
     let mut diff_opts = DiffOptions::new();
     diff_opts.pathspec(path);
+    // Diff files Claude/agents newly create (untracked) as an all-added diff;
+    // show_untracked_content makes libgit2 emit the line callbacks, not just the delta.
+    diff_opts.include_untracked(true);
+    diff_opts.show_untracked_content(true);
 
     let diff = repo.diff_index_to_workdir(None, Some(&mut diff_opts))?;
 

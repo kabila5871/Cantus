@@ -86,6 +86,10 @@ export function ChatSessions() {
   // Queue: text to write once a pty id is known (handles new-tab races).
   const pendingWriteRef = useRef<string | null>(null);
 
+  useEffect(() => {
+    store.setChatActive(tabs.length > 0);
+  }, [tabs.length]); // eslint-disable-line react-hooks/exhaustive-deps -- store.setChatActive is stable
+
   const openNewTab = (title = "New chat", args?: string[], sessionId?: string) => {
     const key = newKey();
     setTabs((prev) => [...prev, { key, title, program: "claude", args, sessionId }]);

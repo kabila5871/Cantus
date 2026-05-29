@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DiffEditor, loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
-import { gitDiff, gitStageHunk, gitStageLines } from "./ipc";
+import { gitDiff, gitStageHunk, gitStageLines, gitDiscardHunk, gitDiscardLines } from "./ipc";
 import { type GitDiff, type GitHunk, type CommandError } from "./ipc";
 import { langFromPath } from "./lang";
 import { useStore } from "./store";
@@ -39,21 +39,41 @@ function resolveLineRange(
   return null;
 }
 
-// Content widget that floats next to the cursor offering "Stage N lines".
+// Content widget that floats next to the cursor offering "Stage N lines" and "Discard selected".
 class StageSelectionWidget implements monaco.editor.IContentWidget {
   private domNode: HTMLElement;
   private position: monaco.editor.IContentWidgetPosition | null = null;
   readonly getId = () => "cantus.stage-selection";
 
-  constructor(label: string, line: number, onClick: () => void) {
-    this.domNode = document.createElement("button");
-    this.domNode.className = "diff-gutter-stage-btn diff-gutter-stage-btn--float";
-    this.domNode.textContent = label;
-    this.domNode.addEventListener("mousedown", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      onClick();
-    });
+  constructor(
+    stageLabel: string,
+    discardLabel: string,
+    line: number,
+    onStage: () => void,
+    onDiscard: () => void,
+  ) {
+    this.domNode = document.createElement("div");
+    this.domNode.className = "diff-gutter-float-widget";
+
+    const makeBtn = (label: string, cls: string, handler: () => void) => {
+      const btn = document.createElement("button");
+      btn.className = cls;
+      btn.textContent = label;
+      btn.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        handler();
+      });
+      return btn;
+    };
+
+    this.domNode.appendChild(
+      makeBtn(stageLabel, "diff-gutter-stage-btn diff-gutter-stage-btn--float", onStage),
+    );
+    this.domNode.appendChild(
+      makeBtn(discardLabel, "diff-gutter-discard-btn diff-gutter-discard-btn--float", onDiscard),
+    );
+
     this.position = {
       position: { lineNumber: line, column: 1 },
       preference: [
@@ -135,6 +155,7 @@ export function DiffView() {
           options: {
             glyphMarginClassName: "diff-gutter-stage-glyph",
             glyphMarginHoverMessage: { value: "Stage hunk" },
+            linesDecorationsClassName: "diff-gutter-discard-glyph",
             stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
           },
         };
@@ -171,17 +192,16 @@ export function DiffView() {
       decorationsRef.current = null;
       applyDecorations(modified, diffRef.current);
 
-      // Glyph-margin click → stage hunk.
+      // Glyph-margin click → stage hunk; line-decorations click → discard hunk.
       modified.onMouseDown((e) => {
-        if (
-          e.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN ||
-          !e.target.position
-        ) return;
+        const isStage = e.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN;
+        const isDiscard = e.target.type === monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS;
+        if ((!isStage && !isDiscard) || !e.target.position) return;
+
         const clickedLine = e.target.position.lineNumber;
         const currentDiff = diffRef.current;
         if (!currentDiff || !path) return;
 
-        // Find hunk whose decoration line matches.
         const model = modified.getModel();
         const lineCount = model?.getLineCount() ?? 0;
         const hunkIndex = currentDiff.hunks.findIndex((hunk) => {
@@ -190,12 +210,22 @@ export function DiffView() {
         });
         if (hunkIndex === -1) return;
 
-        void gitStageHunk(path, hunkIndex)
-          .then((status) => {
-            store.setGitStatus(status);
-            return afterStage(path);
-          })
-          .catch((err: CommandError) => setError(err.message));
+        if (isStage) {
+          void gitStageHunk(path, hunkIndex)
+            .then((status) => {
+              store.setGitStatus(status);
+              return afterStage(path);
+            })
+            .catch((err: CommandError) => setError(err.message));
+        } else {
+          if (!confirm("Discard changes in this hunk? This cannot be undone.")) return;
+          void gitDiscardHunk(path, hunkIndex)
+            .then((status: import("./ipc").GitStatus) => {
+              store.setGitStatus(status);
+              return afterStage(path);
+            })
+            .catch((err: CommandError) => setError(err.message));
+        }
       });
 
       // Selection change → show floating "Stage N lines" widget.
@@ -213,18 +243,35 @@ export function DiffView() {
         const resolved = resolveLineRange(currentDiff.hunks, startLine, endLine);
         if (!resolved || resolved.lineIndices.length === 0) return;
 
-        const label = `Stage ${resolved.lineIndices.length} line${resolved.lineIndices.length === 1 ? "" : "s"}`;
         const { hunkIndex, lineIndices } = resolved;
+        const lineWord = `line${resolved.lineIndices.length === 1 ? "" : "s"}`;
+        const stageLabel = `Stage ${resolved.lineIndices.length} ${lineWord}`;
+        const discardLabel = `Discard ${resolved.lineIndices.length} ${lineWord}`;
 
-        const widget = new StageSelectionWidget(label, startLine, () => {
-          clearWidget();
-          void gitStageLines(path, hunkIndex, lineIndices)
-            .then((status) => {
-              store.setGitStatus(status);
-              return afterStage(path);
-            })
-            .catch((err: CommandError) => setError(err.message));
-        });
+        const widget = new StageSelectionWidget(
+          stageLabel,
+          discardLabel,
+          startLine,
+          () => {
+            clearWidget();
+            void gitStageLines(path, hunkIndex, lineIndices)
+              .then((status) => {
+                store.setGitStatus(status);
+                return afterStage(path);
+              })
+              .catch((err: CommandError) => setError(err.message));
+          },
+          () => {
+            clearWidget();
+            if (!confirm("Discard selected lines? This cannot be undone.")) return;
+            void gitDiscardLines(path, hunkIndex, lineIndices)
+              .then((status: import("./ipc").GitStatus) => {
+                store.setGitStatus(status);
+                return afterStage(path);
+              })
+              .catch((err: CommandError) => setError(err.message));
+          },
+        );
         widgetRef.current = widget;
         modified.addContentWidget(widget);
         modified.layoutContentWidget(widget);
@@ -287,6 +334,17 @@ export function DiffView() {
               renderSideBySide: mode === "split",
               readOnly: true,
               glyphMargin: true,
+              lineDecorationsWidth: 18,
+              // Collapse unchanged code to changes + context, like VS Code.
+              hideUnchangedRegions: {
+                enabled: true,
+                contextLineCount: 3,
+                minimumLineCount: 3,
+                revealLineCount: 20,
+              },
+              renderOverviewRuler: true,
+              lineNumbers: "on",
+              renderGutterMenu: true,
               fontSize: 13,
               fontFamily: '"JetBrains Mono", monospace',
               minimap: { enabled: false },

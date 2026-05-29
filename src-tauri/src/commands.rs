@@ -469,6 +469,27 @@ pub async fn git_unstage_lines(
     crate::git::unstage_lines(&root, &rel, hunk_index, &line_indices)
 }
 
+#[tauri::command]
+pub async fn git_discard_hunk(
+    state: State<'_, AppState>,
+    path: String,
+    hunk_index: usize,
+) -> Result<crate::git::GitStatus, CommandError> {
+    let (root, rel) = scoped_single_path(&state, &path)?;
+    crate::git::discard_hunk(&root, &rel, hunk_index)
+}
+
+#[tauri::command]
+pub async fn git_discard_lines(
+    state: State<'_, AppState>,
+    path: String,
+    hunk_index: usize,
+    line_indices: Vec<usize>,
+) -> Result<crate::git::GitStatus, CommandError> {
+    let (root, rel) = scoped_single_path(&state, &path)?;
+    crate::git::discard_lines(&root, &rel, hunk_index, &line_indices)
+}
+
 /// Validate + resolve a single project-relative path, returning the root and
 /// the validated relative string (forward-slash, no escapes).
 fn scoped_single_path(

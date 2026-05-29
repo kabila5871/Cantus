@@ -212,6 +212,8 @@ export const gitStageHunk = (path: string, hunkIndex: number): Promise<GitStatus
 export const gitUnstageHunk = (path: string, hunkIndex: number): Promise<GitStatus> => invoke("git_unstage_hunk", { path, hunkIndex });
 export const gitStageLines = (path: string, hunkIndex: number, lineIndices: number[]): Promise<GitStatus> => invoke("git_stage_lines", { path, hunkIndex, lineIndices });
 export const gitUnstageLines = (path: string, hunkIndex: number, lineIndices: number[]): Promise<GitStatus> => invoke("git_unstage_lines", { path, hunkIndex, lineIndices });
+export const gitDiscardHunk = (path: string, hunkIndex: number): Promise<GitStatus> => invoke("git_discard_hunk", { path, hunkIndex });
+export const gitDiscardLines = (path: string, hunkIndex: number, lineIndices: number[]): Promise<GitStatus> => invoke("git_discard_lines", { path, hunkIndex, lineIndices });
 
 // ── Agent seam ────────────────────────────────────────────────────────────────
 

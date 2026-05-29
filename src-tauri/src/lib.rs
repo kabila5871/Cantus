@@ -57,6 +57,8 @@ pub fn run() {
             commands::git_unstage_hunk,
             commands::git_stage_lines,
             commands::git_unstage_lines,
+            commands::git_discard_hunk,
+            commands::git_discard_lines,
             commands::agent_start,
             commands::agent_send,
             commands::agent_resolve_edit,

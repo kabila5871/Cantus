@@ -90,9 +90,11 @@ Cantus is greenfield — write it lean and keep it lean. Every agent follows thi
 
 **Phase A (shipped):** multiple shell terminals in tabs (bottom) · embedded `claude` CLI chat with per-project session history + new/resume tabs (right) · app-wide top bar — Skills / Agents / Workflows / Sessions — browse + launch into the active chat. See "Claude integration" above.
 
-**Phase B (next, not yet built):**
-- **Surface Claude's edits like Cursor** — watch the CLI's file writes, auto-open the changed file, show a diff (reuse `DiffView` / git-diff; the dormant `propose_edit` flow is the model).
-- **Octogent-style orchestration** — a parent that dispatches scoped tasks to multiple concurrent worker `claude` sessions; cross-session status. The multi-PTY + session foundation supports it.
+**Phase B (shipped):**
+- **Edit surfacing** — the FS watcher feeds a `ChangesStrip` (store `agentChanges`) listing files changed by the CLI (filtered to git-tracked, editor saves excluded via buffer hash); clicking opens the diff, and the diff auto-reveals while a chat is active but never yanks you out of the file you're editing. `git diff` uses `include_untracked` + `show_untracked_content` so newly-created files diff as all-added.
+- **Orchestrator tab** (`OrchestratorView.tsx`, 5th top-bar view) — two-step: **(1) Prepare** spawns one `claude` session seeded to create/modify the project's `.claude/{agents,skills,workflows}` for the goal (modify-not-duplicate); **(2) Start orchestration** (gated on prepared) fans out one worker `claude` PTY per task, each told to use those assets. Workers seeded race-free via a positional prompt arg (`claude "<prompt>"`), watchable as `TerminalTabs`.
+
+**Phase B (deeper, not yet built):** parent-plans-then-dispatches (auto-derive tasks), real worker status (Octogent's `todo.md`/tentacle model — workers report progress to a file the UI reads), cross-worker coordination.
 
 **Still out:** debugging/DAP, multi-project, vector retrieval, Windows/Linux.
 

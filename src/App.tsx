@@ -24,8 +24,10 @@ import { handleGlobalKeyDown } from "./keybindings";
 import { TopBar, type TopView } from "./TopBar";
 import { AssetBrowser } from "./AssetBrowser";
 import { SessionsView } from "./SessionsView";
+import { OrchestratorView } from "./OrchestratorView";
 import { TerminalTabs, type TerminalTabDef } from "./TerminalTabs";
 import { ChatSessions } from "./ChatSessions";
+import { ChangesStrip } from "./ChangesStrip";
 import "@xterm/xterm/css/xterm.css";
 import "./App.css";
 
@@ -108,6 +110,10 @@ function WorkspaceInner({ info }: { info: AppInfo | null }) {
 
   const buffersRef = useRef(store.buffers);
   buffersRef.current = store.buffers;
+  const chatActiveRef = useRef(store.chatActive);
+  chatActiveRef.current = store.chatActive;
+  const activeBufferRef = useRef(store.activeBufferPath);
+  activeBufferRef.current = store.activeBufferPath;
 
   const focusChatInput = useCallback(() => {
     chatFocusCbRef.current?.();
@@ -151,7 +157,18 @@ function WorkspaceInner({ info }: { info: AppInfo | null }) {
       }
 
       void gitStatus()
-        .then((s) => store.setGitStatus(s))
+        .then((s) => {
+          store.setGitStatus(s);
+          if (change.kind === "removed") return;
+          const buf = buffersRef.current.get(change.path);
+          const isExternal = !buf || (!!change.content_hash && change.content_hash !== buf.contentHash);
+          const tracked = s.entries.some((e) => e.path === change.path);
+          if (!isExternal || !tracked) return;
+          store.noteAgentChange(change.path);
+          if (chatActiveRef.current && change.path !== activeBufferRef.current) {
+            store.openDiff(change.path);
+          }
+        })
         .catch(() => {});
     }).then((fn) => {
       unlisten = fn;
@@ -206,6 +223,7 @@ function WorkspaceInner({ info }: { info: AppInfo | null }) {
             <PanelGroup direction="vertical">
               <Panel defaultSize={70} minSize={20}>
                 <Pane>
+                  <ChangesStrip />
                   {store.diffPath ? <DiffView /> : <EditorPane />}
                 </Pane>
               </Panel>
@@ -235,6 +253,8 @@ function WorkspaceInner({ info }: { info: AppInfo | null }) {
                   setTopView("none");
                 }}
               />
+            ) : topView === "orchestrator" ? (
+              <OrchestratorView onClose={() => setTopView("none")} />
             ) : (
               <AssetBrowser
                 kind={topView}
