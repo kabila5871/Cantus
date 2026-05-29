@@ -34,6 +34,13 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # The tauri build script validates externalBin (binaries/node) existence even
+      # for clippy/test. CI doesn't bundle, so stub it with the runner's own node.
+      - name: Stub node sidecar for build script
+        run: |
+          mkdir -p src-tauri/binaries
+          cp "$(command -v node)" src-tauri/binaries/node-aarch64-apple-darwin
+
       - name: rustfmt
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
 
