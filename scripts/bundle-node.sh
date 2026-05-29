@@ -3,7 +3,7 @@
 # binary and install agent-host npm dependencies before `cargo tauri build`.
 #
 # Usage: ./scripts/bundle-node.sh [NODE_VERSION]
-#   NODE_VERSION defaults to the value of .nvmrc or 22.
+#   NODE_VERSION must be a full version (e.g. 22.13.1); defaults to .nvmrc.
 
 set -euo pipefail
 
@@ -16,7 +16,7 @@ NODE_VERSION="${1:-}"
 if [[ -z "$NODE_VERSION" && -f "$REPO_ROOT/.nvmrc" ]]; then
   NODE_VERSION="$(cat "$REPO_ROOT/.nvmrc")"
 fi
-NODE_VERSION="${NODE_VERSION:-22}"
+NODE_VERSION="${NODE_VERSION:-22.13.1}"
 
 TARGET="node-aarch64-apple-darwin"
 DEST="$BINARIES_DIR/$TARGET"
@@ -25,7 +25,9 @@ if [[ -f "$DEST" && ! -L "$DEST" ]]; then
   echo "Sidecar already present: $DEST"
 else
   ARCHIVE="node-v${NODE_VERSION}-darwin-arm64.tar.gz"
-  URL="https://nodejs.org/dist/latest-v${NODE_VERSION}.x/$ARCHIVE"
+  # Canonical per-version path: the latest-vX.x dir names files by full version,
+  # so a major-only NODE_VERSION 404s. dist/vX.Y.Z/ resolves reliably.
+  URL="https://nodejs.org/dist/v${NODE_VERSION}/$ARCHIVE"
   TMP="$(mktemp -d)"
   echo "Downloading Node $NODE_VERSION for darwin-arm64..."
   curl -fsSL "$URL" -o "$TMP/$ARCHIVE"

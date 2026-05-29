@@ -34,16 +34,26 @@ Today's tooling forces a compromise:
 
 Cantus closes the gap by making the agent context-aware by default and sharing state across every pane.
 
-## Features (MVP)
+## Download
 
-- 🎛️ **Four-pane layout** — file tree, Monaco editor, terminal, and Claude chat, in one resizable window.
+Grab the latest `.dmg` from the [**Releases page**](https://github.com/manan45/Cantus/releases/latest) (macOS, Apple Silicon).
+
+> Builds are currently **unsigned**, so Gatekeeper will warn on first launch. Either right-click the app → **Open**, or clear the quarantine flag:
+> ```bash
+> xattr -dr com.apple.quarantine /Applications/Cantus.app
+> ```
+
+## Features
+
+- 🎛️ **Four-pane workspace** — file tree, Monaco editor, terminal, and Claude, in one resizable window.
 - 🧠 **Context-aware agent** — Claude sees the open file, your selection, and recent edits without copy-paste.
 - ✍️ **Edits as accept/reject diffs** — the agent proposes changes inline in Monaco; you accept or reject.
-- 🖥️ **Real terminal** — a true shell via a backend-spawned PTY.
-- 🌿 **Built-in git** — status, stage, commit, and an inline diff view (via libgit2, no shelling out).
+- 🔍 **VS Code-style diff** — split/inline views with collapsed unchanged regions and per-hunk **and** per-line stage / discard.
+- 🖥️ **Claude in a real terminal** — the agent runs in a backend-spawned PTY, full-width and resumable.
+- 🌿 **Built-in git** — status, branch switcher, stage, commit, and discard — via libgit2, no shelling out.
 - 💾 **Resumable sessions** — chat and agent history persist locally in SQLite; resume with a summary re-seed.
 - 🔒 **Local-first & private** — your source never leaves the machine except as the agent's model calls.
-- ⌨️ **Keyboard-driven** — command palette and a baseline keybinding set.
+- 🎨 **Crafted UI** — deep dark palette, glassmorphism chrome, and JetBrains Mono throughout.
 
 ## Tech stack
 
@@ -99,7 +109,7 @@ The frontend and backend talk **only** through typed Tauri IPC commands and even
 
 ## Roadmap
 
-- **Phase 1 — MVP** *(in progress)* — the four-pane shell, context-aware agent, git basics, persistence.
+- **Phase 1 — MVP** *(shipped in v1.0)* — the four-pane shell, context-aware agent, git with hunk/line staging, persistence.
 - **Phase 2 — Depth** — Debug Adapter Protocol (debugging), a skills manager, and subagents.
 - **Phase 3 — Orchestration** — an agent-teams dashboard, saved workflows, multi-project, and cross-platform (Linux, then Windows).
 

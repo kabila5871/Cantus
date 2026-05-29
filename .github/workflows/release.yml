@@ -1,7 +1,8 @@
 name: Release
 
-# Tag a version to build installers and open a draft GitHub Release:
-#   git tag v0.1.0 && git push origin v0.1.0
+# Tag a version to build the macOS installer and open a draft GitHub Release;
+# publish the draft once the build is green and the .dmg is attached:
+#   git tag v1.0.0 && git push origin v1.0.0
 # Builds are unsigned until Apple signing secrets (APPLE_CERTIFICATE, etc.) are added.
 
 on:
@@ -36,7 +37,11 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Cantus ${{ github.ref_name }}
-          releaseBody: Download the .dmg below to install Cantus.
+          releaseBody: |
+            Download the `.dmg` below to install Cantus (macOS, Apple Silicon).
+
+            This build is **unsigned** — on first launch, right-click the app and choose **Open**, or run:
+            `xattr -dr com.apple.quarantine /Applications/Cantus.app`
           releaseDraft: true
           prerelease: false
           args: --target aarch64-apple-darwin
