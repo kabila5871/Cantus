@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build && ../scripts/bundle-node.sh",
+    "beforeBuildCommand": "npm run build && npm run bundle:node",
     "frontendDist": "../dist"
   },
   "app": {
