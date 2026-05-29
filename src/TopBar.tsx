@@ -1,4 +1,4 @@
-export type TopView = "none" | "skills" | "agents" | "workflows" | "sessions";
+export type TopView = "none" | "skills" | "agents" | "workflows" | "sessions" | "orchestrator";
 
 interface TopBarProps {
   active: TopView;
@@ -11,7 +11,7 @@ export function TopBar({ active, onSelect }: TopBarProps) {
 
   return (
     <div className="top-bar">
-      {(["skills", "agents", "workflows", "sessions"] as const).map((v) => (
+      {(["skills", "agents", "workflows", "sessions", "orchestrator"] as const).map((v) => (
         <button
           key={v}
           className={`top-bar__btn${active === v ? " top-bar__btn--active" : ""}`}
