@@ -4,6 +4,16 @@ All notable changes to Cantus are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.2.1] — 2026-05-30
+
+### Added
+
+- **Homebrew install** — `brew install --cask manan45/cantus/cantus` via the `manan45/homebrew-cantus` tap, auto-bumped on each published release.
+
+### Changed
+
+- Landing-page SEO and discoverability: a correctly-sized social-preview card, `sitemap.xml` / `robots.txt` / web manifest, self-hosted fonts, and the GitHub About metadata; README first-screen polish with real screenshots. No application code changed from 1.2.0.
+
 ## [1.2.0] — 2026-05-30
 
 ### Added
@@ -73,6 +83,7 @@ First public release. The four-pane, Claude-first coding environment is feature-
 - macOS (Apple Silicon) only for this release; Linux and Windows are on the roadmap.
 - Release binaries are **unsigned** until Apple signing secrets are configured — see the download notes in the README for how to open an unsigned build.
 
+[1.2.1]: https://github.com/manan45/Cantus/releases/tag/v1.2.1
 [1.2.0]: https://github.com/manan45/Cantus/releases/tag/v1.2.0
 [1.1.0]: https://github.com/manan45/Cantus/releases/tag/v1.1.0
 [1.0.1]: https://github.com/manan45/Cantus/releases/tag/v1.0.1

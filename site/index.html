@@ -391,6 +391,42 @@
         color: var(--dim);
       }
 
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      /* Comparison table */
+      .compare-wrap { overflow-x: auto; margin-top: 8px; }
+      .compare {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 15px;
+        text-align: left;
+        min-width: 640px;
+      }
+      .compare th,
+      .compare td {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      .compare thead th { font-size: 13px; color: var(--dim); font-weight: 600; }
+      .compare tbody th { color: var(--text); font-weight: 600; white-space: nowrap; }
+      .compare td { color: var(--dim); }
+      .compare th:nth-child(2),
+      .compare td:nth-child(2) { background: var(--bg-raised); color: var(--text); }
+      .compare thead th:nth-child(2) { color: var(--coral); }
+      .compare code { font-family: var(--mono); font-size: 13px; color: var(--coral); }
+      .compare-note { margin-top: 12px; font-size: 12px; color: var(--dim); }
+
       /* Banner strip (logo banner, real aspect ratio) */
       .banner-strip { margin: 32px auto 0; max-width: 760px; }
       .banner-strip img {
@@ -456,6 +492,7 @@
       <span class="spacer"></span>
       <a class="link" href="#features">Features</a>
       <a class="link" href="#screenshot">Screenshot</a>
+      <a class="link" href="#compare">Compare</a>
       <a class="link" href="#tech">Stack</a>
       <a class="link" href="#faq">FAQ</a>
       <a class="link" href="https://github.com/manan45/Cantus">GitHub ↗</a>
@@ -587,6 +624,71 @@
               <p>Your source never leaves the machine except Claude's own model API calls. No telemetry, no account, no subscription.</p>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section class="block" id="compare" aria-labelledby="compare-heading">
+        <div class="wrap">
+          <h2 id="compare-heading">How Cantus compares</h2>
+          <p class="sub">
+            Where a dedicated <b>Claude Code GUI</b> fits — vs. the bare <code>claude</code> CLI in a
+            terminal, and vs. a GUI IDE with a bolted-on AI side panel. Unlike a session-manager wrapper,
+            Cantus is a full IDE workspace: editor, terminal, and git share one window and one project.
+          </p>
+          <div class="compare-wrap">
+            <table class="compare">
+              <thead>
+                <tr>
+                  <th scope="col"><span class="sr-only">Capability</span></th>
+                  <th scope="col">Cantus</th>
+                  <th scope="col">Bare Claude Code in a terminal</th>
+                  <th scope="col">GUI IDE + AI side panel</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">The agent</th>
+                  <td>The real <code>claude</code> CLI in an integrated PTY</td>
+                  <td>The real <code>claude</code> CLI, but alone</td>
+                  <td>A bolted-on chat panel, not the CLI you know</td>
+                </tr>
+                <tr>
+                  <th scope="row">Editor</th>
+                  <td>Monaco, beside the agent</td>
+                  <td>None</td>
+                  <td>Yes</td>
+                </tr>
+                <tr>
+                  <th scope="row">Git UI</th>
+                  <td>libgit2, per-hunk &amp; per-line staging</td>
+                  <td>None (shell only)</td>
+                  <td>Varies</td>
+                </tr>
+                <tr>
+                  <th scope="row">Local &amp; private</th>
+                  <td>Yes — source never leaves the machine<sup>1</sup></td>
+                  <td>Yes</td>
+                  <td>Often cloud-assisted</td>
+                </tr>
+                <tr>
+                  <th scope="row">Footprint</th>
+                  <td>Small native Tauri binary — no Electron</td>
+                  <td>Tiny</td>
+                  <td>Large (often Electron)</td>
+                </tr>
+                <tr>
+                  <th scope="row">Cost &amp; licensing</th>
+                  <td>Free, open-source (MIT)</td>
+                  <td>Free</td>
+                  <td>Often paid / subscription</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="compare-note">
+            <sup>1</sup> Except Claude's own model API calls. Cantus is not affiliated with Anthropic;
+            “Claude” and “Claude Code” are Anthropic's.
+          </p>
         </div>
       </section>
 
