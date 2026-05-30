@@ -8,8 +8,8 @@ Cantus is under active development and ships frequently. Security fixes land on 
 
 | Version | Supported |
 |---|---|
-| 1.1.x (latest) | ✅ |
-| < 1.1 | ❌ — upgrade to the latest release |
+| 1.2.x (latest) | ✅ |
+| < 1.2 | ❌ — upgrade to the latest release |
 
 ## Reporting a vulnerability
 

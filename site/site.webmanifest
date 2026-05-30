@@ -1,23 +1,24 @@
 {
   "name": "Cantus — Claude Code GUI & IDE for macOS",
   "short_name": "Cantus",
-  "description": "Cantus gives Claude Code a real IDE on macOS: Monaco editor, an integrated terminal running the Claude CLI, and libgit2 git in one local-first, private native app.",
+  "description": "An open-source native macOS GUI for Claude Code: Monaco editor, the real Claude CLI in an integrated terminal, and libgit2 git with per-line staging. Local-first, free, no Electron.",
   "start_url": "/Cantus/",
+  "scope": "/Cantus/",
   "display": "standalone",
   "theme_color": "#1b1d23",
   "background_color": "#1b1d23",
   "icons": [
     {
-      "src": "assets/cantus-icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "assets/cantus-icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png",
       "purpose": "any"
     },
     {
       "src": "assets/cantus-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     }
   ]
 }

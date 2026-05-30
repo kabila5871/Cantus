@@ -73,6 +73,7 @@ First public release. The four-pane, Claude-first coding environment is feature-
 - macOS (Apple Silicon) only for this release; Linux and Windows are on the roadmap.
 - Release binaries are **unsigned** until Apple signing secrets are configured — see the download notes in the README for how to open an unsigned build.
 
+[1.2.0]: https://github.com/manan45/Cantus/releases/tag/v1.2.0
 [1.1.0]: https://github.com/manan45/Cantus/releases/tag/v1.1.0
 [1.0.1]: https://github.com/manan45/Cantus/releases/tag/v1.0.1
 [1.0.0]: https://github.com/manan45/Cantus/releases/tag/v1.0.0

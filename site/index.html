@@ -6,7 +6,7 @@
     <title>Cantus — Claude Code GUI &amp; IDE for macOS</title>
     <meta
       name="description"
-      content="Cantus gives Claude Code a real IDE on macOS: Monaco editor, an integrated terminal running the Claude CLI, and libgit2 git in one local-first, private native app."
+      content="An open-source native macOS GUI for Claude Code: Monaco editor, the real Claude CLI in an integrated terminal, and libgit2 git with per-line staging. Local-first, free, no Electron."
     />
     <link rel="canonical" href="https://manan45.github.io/Cantus/" />
     <meta name="robots" content="index, follow" />
@@ -14,30 +14,48 @@
     <meta name="color-scheme" content="dark light" />
     <meta
       name="keywords"
-      content="Claude Code GUI, Claude Code IDE, Claude Code desktop app, GUI for Claude Code, Tauri AI editor, AI coding desktop app macOS, local-first AI IDE, Claude Code git staging, integrated terminal AI agent"
+      content="Claude Code GUI, Claude Code IDE, GUI for Claude Code, Claude Code desktop app, Claude Code Mac app, open source Claude Code GUI, native macOS AI IDE, local-first AI coding IDE, per-line git staging editor, Tauri AI code editor"
     />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Cantus" />
     <meta property="og:title" content="Cantus — Claude Code GUI &amp; IDE for macOS" />
-    <meta property="og:description" content="Cantus gives Claude Code a real IDE on macOS: Monaco editor, an integrated terminal running the Claude CLI, and libgit2 git in one local-first, private native app." />
+    <meta property="og:description" content="An open-source native macOS GUI for Claude Code: Monaco editor, the real Claude CLI in an integrated terminal, and libgit2 git with per-line staging. Local-first, free, no Electron." />
     <meta property="og:url" content="https://manan45.github.io/Cantus/" />
-    <meta property="og:image" content="https://manan45.github.io/Cantus/assets/cantus-banner.png" />
+    <meta property="og:image" content="https://manan45.github.io/Cantus/assets/cantus-og.png" />
     <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="320" />
-    <meta property="og:image:alt" content="The Cantus workspace — Monaco editor, an integrated terminal running Claude Code, and git in one macOS window" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="The Cantus workspace: Monaco editor, the Claude Code CLI in an integrated terminal, and a file tree — all in one native macOS window" />
+    <meta property="og:locale" content="en_US" />
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Cantus — Claude Code GUI &amp; IDE for macOS" />
-    <meta name="twitter:description" content="Cantus gives Claude Code a real IDE on macOS: Monaco editor, an integrated terminal running the Claude CLI, and libgit2 git in one local-first, private native app." />
-    <meta name="twitter:image" content="https://manan45.github.io/Cantus/assets/cantus-banner.png" />
+    <meta name="twitter:description" content="An open-source native macOS GUI for Claude Code: Monaco editor, the real Claude CLI in an integrated terminal, and libgit2 git with per-line staging. Local-first, free, no Electron." />
+    <meta name="twitter:image" content="https://manan45.github.io/Cantus/assets/cantus-og.png" />
+    <meta name="twitter:image:alt" content="The Cantus workspace: Monaco editor, the Claude Code CLI in an integrated terminal, and a file tree — all in one native macOS window" />
 
     <!-- Favicon + manifest -->
     <link rel="icon" type="image/svg+xml" href="assets/cantus-icon.svg" />
-    <link rel="apple-touch-icon" href="assets/cantus-icon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/cantus-icon-180.png" />
     <link rel="manifest" href="site.webmanifest" />
+
+    <!-- JetBrains Mono — self-hosted, preloaded for headings/code -->
+    <link
+      rel="preload"
+      href="assets/jetbrains-mono-latin-700-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="preload"
+      href="assets/jetbrains-mono-latin-800-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin="anonymous"
+    />
 
     <!-- JSON-LD structured data -->
     <script type="application/ld+json">
@@ -46,11 +64,13 @@
       "@graph": [
         {
           "@type": "SoftwareApplication",
+          "@id": "https://manan45.github.io/Cantus/#software",
           "name": "Cantus",
           "applicationCategory": "DeveloperApplication",
-          "operatingSystem": "macOS",
+          "operatingSystem": "macOS 11+ (Apple Silicon)",
+          "softwareVersion": "1.2.0",
           "url": "https://manan45.github.io/Cantus/",
-          "description": "Cantus gives Claude Code a real IDE on macOS: Monaco editor, an integrated terminal running the Claude CLI, and libgit2 git in one local-first, private native app.",
+          "description": "An open-source native macOS GUI for Claude Code: Monaco editor, the real Claude CLI in an integrated terminal, and libgit2 git with per-line staging. Local-first, free, no Electron.",
           "offers": {
             "@type": "Offer",
             "price": "0",
@@ -58,33 +78,131 @@
           },
           "author": {
             "@type": "Person",
-            "name": "Manan Wadhwa"
+            "@id": "https://github.com/manan45",
+            "name": "Manan Wadhwa",
+            "url": "https://github.com/manan45"
           },
           "license": "https://github.com/manan45/Cantus/blob/main/LICENSE",
           "codeRepository": "https://github.com/manan45/Cantus",
           "downloadUrl": "https://github.com/manan45/Cantus/releases",
-          "image": "https://manan45.github.io/Cantus/assets/cantus-banner.png"
+          "image": "https://manan45.github.io/Cantus/assets/cantus-og.png",
+          "keywords": "Claude Code GUI, Claude Code IDE, open source Claude Code GUI, native macOS AI IDE, Monaco editor, libgit2, Tauri, local-first"
         },
         {
           "@type": "WebSite",
+          "@id": "https://manan45.github.io/Cantus/#website",
           "name": "Cantus",
           "url": "https://manan45.github.io/Cantus/",
-          "description": "Cantus — a Claude-first desktop IDE for macOS. Monaco editor, integrated Claude Code terminal, and libgit2 git in one local-first native app.",
+          "description": "An open-source native macOS GUI for Claude Code: Monaco editor, the real Claude CLI in an integrated terminal, and libgit2 git with per-line staging. Local-first, free, no Electron.",
           "author": {
             "@type": "Person",
-            "name": "Manan Wadhwa"
+            "@id": "https://github.com/manan45"
           }
         },
         {
           "@type": "Person",
+          "@id": "https://github.com/manan45",
           "name": "Manan Wadhwa",
           "url": "https://github.com/manan45"
+        },
+        {
+          "@type": "SoftwareSourceCode",
+          "name": "Cantus",
+          "codeRepository": "https://github.com/manan45/Cantus",
+          "programmingLanguage": ["Rust", "TypeScript"],
+          "runtimePlatform": "Tauri 2",
+          "license": "https://github.com/manan45/Cantus/blob/main/LICENSE",
+          "author": {
+            "@type": "Person",
+            "@id": "https://github.com/manan45"
+          }
+        },
+        {
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            {
+              "@type": "ListItem",
+              "position": 1,
+              "name": "Cantus",
+              "item": "https://manan45.github.io/Cantus/"
+            }
+          ]
+        },
+        {
+          "@type": "FAQPage",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "Is Cantus a GUI for Claude Code?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. Cantus is an open-source macOS desktop app that gives Claude Code a full IDE workspace — Monaco editor, a file tree, and the real claude CLI running in an integrated terminal, all in one native window. It is not a chat wrapper or a session manager."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Does Cantus use the real Claude Code CLI?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. The backend spawns the actual claude CLI in a PTY (pseudo-terminal) and streams its output through xterm.js. Sessions are resumable, full-width, and behave exactly as they would in a standalone terminal."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Is Cantus free and open source?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. Cantus is MIT-licensed and free. The source is at github.com/manan45/Cantus. No account, no subscription, no telemetry."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Does Cantus run on Intel Macs, Windows, or Linux?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "The current release (v1.2.0) targets macOS on Apple Silicon. Cross-platform support (Intel Mac, Windows, Linux) is on the roadmap but not yet shipped."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Is Cantus built on Electron?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "No. Cantus is built on Tauri 2 with a Rust backend, using the OS-native webview — not Chromium / Electron. The result is a small, native binary with low memory overhead."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How do I install Cantus?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Via Homebrew: run `brew tap manan45/cantus` then `brew install --cask cantus`. Or download the .dmg directly from the GitHub releases page at github.com/manan45/Cantus/releases. The binary is currently unsigned — on first launch, right-click the app and choose Open."
+              }
+            }
+          ]
         }
       ]
     }
     </script>
 
     <style>
+      @font-face {
+        font-family: "JetBrains Mono";
+        src: url("assets/jetbrains-mono-latin-700-normal.woff2") format("woff2");
+        font-weight: 700;
+        font-style: normal;
+        font-display: swap;
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+      }
+      @font-face {
+        font-family: "JetBrains Mono";
+        src: url("assets/jetbrains-mono-latin-800-normal.woff2") format("woff2");
+        font-weight: 800;
+        font-style: normal;
+        font-display: swap;
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+      }
+
       :root {
         --bg: #1b1d23;
         --bg-raised: #21242b;
@@ -94,6 +212,7 @@
         --coral: #e08560;
         --coral-deep: #c0562f;
         --cream: #fbf6ee;
+        --mono: "JetBrains Mono", ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace;
       }
       * { box-sizing: border-box; margin: 0; padding: 0; }
       html { scroll-behavior: smooth; }
@@ -108,19 +227,31 @@
       a { color: inherit; text-decoration: none; }
       .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
 
+      /* Focus styles for keyboard a11y */
+      :focus-visible {
+        outline: 2px solid var(--coral);
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
+
       /* Nav */
       nav {
         display: flex; align-items: center; gap: 12px;
         padding: 20px 24px; max-width: 1080px; margin: 0 auto;
       }
       nav img { width: 30px; height: 30px; border-radius: 7px; }
-      nav .brand { font-weight: 700; letter-spacing: -0.3px; font-size: 18px; }
+      nav .brand {
+        font-family: var(--mono);
+        font-weight: 700;
+        letter-spacing: -0.3px;
+        font-size: 18px;
+      }
       nav .spacer { flex: 1; }
       nav a.link { color: var(--dim); font-size: 14px; transition: color .15s; }
       nav a.link:hover { color: var(--text); }
 
       /* Hero */
-      .hero { position: relative; text-align: center; padding: 80px 0 64px; }
+      .hero { position: relative; text-align: center; padding: 56px 0 64px; }
       .hero::before {
         content: ""; position: absolute; inset: -10% 0 auto 0; height: 460px;
         background: radial-gradient(60% 60% at 50% 0%, rgba(224,133,96,0.22), transparent 70%);
@@ -129,12 +260,22 @@
       .hero > * { position: relative; z-index: 1; }
       .hero .mark { width: 104px; height: 104px; border-radius: 24px; box-shadow: 0 20px 60px rgba(192,86,47,0.35); }
       .hero h1 {
-        font-size: clamp(40px, 7vw, 76px); font-weight: 800; letter-spacing: -2px;
+        font-family: var(--mono);
+        font-size: clamp(36px, 6vw, 68px);
+        font-weight: 800;
+        letter-spacing: -2px;
         margin: 26px 0 10px;
         background: linear-gradient(180deg, #fff, #d7cfc4);
-        -webkit-background-clip: text; background-clip: text; color: transparent;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
       }
-      .hero .tagline { font-size: clamp(17px, 2.4vw, 22px); color: var(--dim); max-width: 660px; margin: 0 auto 32px; }
+      .hero .tagline {
+        font-size: clamp(17px, 2.4vw, 22px);
+        color: var(--dim);
+        max-width: 680px;
+        margin: 0 auto 32px;
+      }
       .hero .tagline b { color: var(--coral); font-weight: 600; }
       .cta { display: inline-flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
       .btn {
@@ -148,9 +289,53 @@
       .btn--ghost:hover { border-color: var(--coral); }
       .hero .note { margin-top: 16px; font-size: 13px; color: var(--dim); }
 
+      /* Homebrew install strip */
+      .brew-strip {
+        margin: 20px auto 0;
+        max-width: 480px;
+        padding: 12px 18px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--bg-raised);
+        font-size: 13px;
+        color: var(--dim);
+        text-align: center;
+      }
+      .brew-strip code {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--coral);
+        background: rgba(224,133,96,0.1);
+        padding: 2px 7px;
+        border-radius: 4px;
+        display: inline-block;
+        margin-top: 4px;
+      }
+
+      /* Why strip */
+      .why-strip {
+        margin: 28px auto 0;
+        max-width: 640px;
+        padding: 14px 20px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--bg-raised);
+        font-size: 13px;
+        color: var(--dim);
+        text-align: left;
+        line-height: 1.7;
+      }
+      .why-strip strong { color: var(--text); }
+
       /* Section */
       section.block { padding: 56px 0; border-top: 1px solid var(--border); }
-      .block h2 { font-size: clamp(26px, 4vw, 34px); letter-spacing: -1px; text-align: center; margin-bottom: 8px; }
+      .block h2 {
+        font-family: var(--mono);
+        font-size: clamp(24px, 3.5vw, 32px);
+        letter-spacing: -1px;
+        text-align: center;
+        margin-bottom: 8px;
+      }
       .block .sub { text-align: center; color: var(--dim); max-width: 600px; margin: 0 auto 40px; }
 
       /* Feature grid */
@@ -162,20 +347,105 @@
       .card:hover { border-color: var(--coral); transform: translateY(-2px); }
       .card .ic { font-size: 22px; margin-bottom: 10px; }
       .card h3 { font-size: 16px; margin-bottom: 6px; }
-      .card p { font-size: 14px; color: var(--dim); }
+      .card p { font-size: 14px; color: var(--dim); line-height: 1.55; }
+      .card code {
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--coral);
+        background: rgba(224,133,96,0.1);
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
 
-      /* Banner */
-      .shot { margin: 0 auto; max-width: 760px; }
-      .shot img { width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--border); aspect-ratio: 1200/630; }
+      /* Screenshot */
+      .shot { margin: 0 auto; max-width: 920px; }
+      .shot img {
+        width: 100%;
+        height: auto;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        display: block;
+      }
+      .shot figcaption {
+        text-align: center;
+        margin-top: 12px;
+        font-size: 13px;
+        color: var(--dim);
+      }
+
+      /* Hero demo video */
+      .hero-demo { margin: 30px auto 26px; max-width: 760px; }
+      .hero-demo video {
+        width: 100%;
+        height: auto;
+        display: block;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        background: #000;
+      }
+      .hero-demo figcaption {
+        text-align: center;
+        margin-top: 10px;
+        font-size: 13px;
+        color: var(--dim);
+      }
+
+      /* Banner strip (logo banner, real aspect ratio) */
+      .banner-strip { margin: 32px auto 0; max-width: 760px; }
+      .banner-strip img {
+        width: 100%;
+        height: auto;
+        display: block;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+      }
 
       /* Tech strip */
       .tech { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
-      .chip { font-size: 13px; color: var(--dim); border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; }
-      .chip b { color: var(--text); font-weight: 600; }
+      .chip {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--dim);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 6px 14px;
+      }
+      .chip b { color: var(--text); font-weight: 700; }
+
+      /* FAQ */
+      .faq-list { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+      .faq-item {
+        background: var(--bg-raised);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 20px 22px;
+      }
+      .faq-item dt {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text);
+        margin-bottom: 6px;
+      }
+      .faq-item dd {
+        font-size: 14px;
+        color: var(--dim);
+        line-height: 1.6;
+        margin: 0;
+      }
+      .faq-item dd code {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--coral);
+        background: rgba(224,133,96,0.1);
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
 
       /* Footer */
       footer { border-top: 1px solid var(--border); padding: 32px 0 56px; text-align: center; color: var(--dim); font-size: 14px; }
       footer a { color: var(--coral); }
+      footer a:hover { text-decoration: underline; }
       footer .sub { margin-top: 8px; font-size: 12px; }
     </style>
   </head>
@@ -185,33 +455,86 @@
       <span class="brand">Cantus</span>
       <span class="spacer"></span>
       <a class="link" href="#features">Features</a>
-      <a class="link" href="https://github.com/manan45/Cantus">GitHub</a>
+      <a class="link" href="#screenshot">Screenshot</a>
+      <a class="link" href="#tech">Stack</a>
+      <a class="link" href="#faq">FAQ</a>
+      <a class="link" href="https://github.com/manan45/Cantus">GitHub ↗</a>
     </nav>
 
     <header class="hero wrap">
       <img
         class="mark"
-        src="assets/cantus-icon.svg"
+        src="assets/cantus-mark.svg"
         alt="Cantus app icon"
         width="104"
         height="104"
       />
-      <h1>Cantus — a Claude-first coding environment for macOS</h1>
+      <h1>Cantus</h1>
       <p class="tagline">
-        The IDE around <b>Claude Code</b> — Monaco editor, an integrated terminal running the Claude CLI, and per-line git staging in one native window. Not a bolted-on sidebar.
+        A <b>full IDE workspace</b> for <b>Claude Code</b> on macOS — not a chat shell or session manager.
+        Monaco editor, the real <b>claude</b> CLI in an integrated terminal, per-line git staging,
+        and a capability-aware task runner in one native window.
       </p>
-      <div class="cta">
-        <a class="btn btn--primary" href="https://github.com/manan45/Cantus/releases">Download for macOS</a>
+
+      <figure class="hero-demo">
+        <!-- Demo: silent ~84s screen capture, transcoded to a web-optimized 1440p H.264 mp4.
+             To replace, drop a new mp4 at assets/demo.mp4 and a still at assets/demo-poster.jpg. -->
+        <video
+          controls
+          preload="none"
+          playsinline
+          poster="assets/demo-poster.jpg"
+          width="760"
+          aria-label="Cantus demo: the Claude Code CLI in an integrated terminal beside a Monaco editor, file tree, and git — in one native macOS window"
+        >
+          <source src="assets/demo.mp4" type="video/mp4" />
+          Your browser can't play embedded video —
+          <a href="assets/demo.mp4">download the demo (MP4)</a>.
+        </video>
+        <figcaption>Watch Cantus in action — 84-second tour</figcaption>
+      </figure>
+
+      <div class="cta" id="download">
+        <a class="btn btn--primary" href="https://github.com/manan45/Cantus/releases/latest">Download for macOS</a>
         <a class="btn btn--ghost" href="https://github.com/manan45/Cantus">View on GitHub</a>
       </div>
-      <p class="note">macOS (Apple Silicon) · local-first &amp; private · unsigned build — right-click → Open on first launch</p>
+      <p class="note">macOS (Apple Silicon) · v1.2.0 · open-source MIT · local-first &amp; private · unsigned build — right-click → Open on first launch</p>
+      <div class="brew-strip" aria-label="Homebrew install command">
+        Also available via Homebrew:<br />
+        <code>brew tap manan45/cantus &amp;&amp; brew install --cask cantus</code>
+      </div>
+      <div class="why-strip" role="note" aria-label="Why Cantus">
+        <strong>Why Cantus?</strong> &nbsp;Cantus is open-source, local-first, and built on a small native
+        Tauri/Rust binary — no Electron, no subscription. Unlike session-manager GUIs, it is a
+        full IDE workspace: file tree, Monaco editor, integrated shell, and the Claude Code CLI all
+        sharing one window and one project state. Source never leaves your machine except Claude's
+        own model API calls. Not affiliated with Anthropic.
+      </div>
     </header>
 
     <main>
+      <section class="block" id="screenshot" aria-labelledby="screenshot-heading">
+        <div class="wrap">
+          <h2 id="screenshot-heading">The four-pane workspace</h2>
+          <p class="sub">File tree, Monaco editor, the Claude Code CLI in an integrated terminal, and an embedded shell — sharing one window and one project state.</p>
+          <figure class="shot">
+            <img
+              src="assets/workspace.png"
+              alt="The Cantus four-pane workspace: file tree on the left, Monaco editor in the center, the Claude Code CLI in an integrated terminal, and a shell panel — all in one native macOS window"
+              width="3024"
+              height="1898"
+              loading="lazy"
+              decoding="async"
+            />
+            <figcaption>Cantus v1.2.0 — macOS (Apple Silicon)</figcaption>
+          </figure>
+        </div>
+      </section>
+
       <section class="block" id="features" aria-labelledby="features-heading">
         <div class="wrap">
           <h2 id="features-heading">One app, in concert</h2>
-          <p class="sub">Editor, terminal, git, and Claude Code sharing one UI and one project.</p>
+          <p class="sub">Editor, terminal, git, and Claude Code sharing one UI and one project state. A full IDE, not a sidebar or session manager.</p>
           <div class="grid">
             <div class="card">
               <div class="ic" aria-hidden="true">🖥️</div>
@@ -219,24 +542,29 @@
               <p>The <code>claude</code> CLI runs in a backend-spawned PTY — full-width, themed, and resumable. This is the actual Claude Code CLI, not a chat wrapper.</p>
             </div>
             <div class="card">
+              <div class="ic" aria-hidden="true">📝</div>
+              <h3>Monaco editor</h3>
+              <p>The same engine as VS Code — syntax highlighting, multi-cursor, VS Code-style inline and split diff views, all inside the native Tauri window.</p>
+            </div>
+            <div class="card">
               <div class="ic" aria-hidden="true">📎</div>
               <h3>Drag files into Claude</h3>
-              <p>Drop any file onto the terminal to insert its path straight into the prompt.</p>
+              <p>Drop any file onto the terminal to insert its path straight into the Claude Code prompt. Zero friction context hand-off.</p>
             </div>
             <div class="card">
               <div class="ic" aria-hidden="true">🔍</div>
-              <h3>VS Code-style diff</h3>
-              <p>Split and inline views with per-hunk <em>and</em> per-line stage &amp; discard, powered by libgit2 patches — not a read-only viewer.</p>
+              <h3>Per-hunk &amp; per-line git staging</h3>
+              <p>Split and inline diff views with per-hunk <em>and</em> per-line stage &amp; discard, powered by libgit2 patches — more granular than a read-only viewer.</p>
             </div>
             <div class="card">
               <div class="ic" aria-hidden="true">🌿</div>
               <h3>Built-in git</h3>
-              <p>Branch switcher, stage, commit, and discard — via libgit2, no shelling out.</p>
+              <p>Branch switcher, stage, commit, and discard — via libgit2, no shelling out. Works entirely offline and locally.</p>
             </div>
             <div class="card">
               <div class="ic" aria-hidden="true">💾</div>
               <h3>Resumable sessions</h3>
-              <p>Your Claude Code sessions for the project, listed and resumable from the chat pane.</p>
+              <p>Your Claude Code sessions for the project are listed and resumable from the sessions view — pick up where Claude left off.</p>
             </div>
             <div class="card">
               <div class="ic" aria-hidden="true">⚙️</div>
@@ -246,25 +574,42 @@
             <div class="card">
               <div class="ic" aria-hidden="true">🧠</div>
               <h3>Learned memory</h3>
-              <p>A local SQLite + FTS5 memory distills the quirks each run teaches and surfaces the relevant ones on the next — no cloud, no vectors.</p>
+              <p>A local SQLite + FTS5 store distills the quirks each run teaches and surfaces the relevant ones on the next — no cloud, no vectors.</p>
+            </div>
+            <div class="card">
+              <div class="ic" aria-hidden="true">📊</div>
+              <h3>IDE monitor</h3>
+              <p>Status-bar CPU &amp; memory usage, running Claude process count, and token usage today and total — a live resource view baked into the IDE.</p>
             </div>
             <div class="card">
               <div class="ic" aria-hidden="true">🔒</div>
               <h3>Local-first &amp; private</h3>
-              <p>Your source never leaves the machine except Claude's own model calls.</p>
+              <p>Your source never leaves the machine except Claude's own model API calls. No telemetry, no account, no subscription.</p>
             </div>
           </div>
         </div>
       </section>
 
-      <section class="block" aria-label="App screenshot">
+      <section class="block" id="tech" aria-labelledby="tech-heading">
         <div class="wrap">
-          <div class="shot">
+          <h2 id="tech-heading">Composed, not reinvented</h2>
+          <p class="sub">Cantus wraps mature, battle-tested components — and builds only the glue and the genuinely novel parts.</p>
+          <div class="tech">
+            <span class="chip"><b>Tauri 2</b> · Rust backend</span>
+            <span class="chip"><b>Rust</b></span>
+            <span class="chip"><b>React</b> + TypeScript</span>
+            <span class="chip"><b>Monaco</b> editor</span>
+            <span class="chip"><b>xterm.js</b> terminal</span>
+            <span class="chip"><b>libgit2</b> git</span>
+            <span class="chip"><b>SQLite</b> + FTS5</span>
+            <span class="chip"><b>Claude Code</b> CLI (PTY)</span>
+          </div>
+          <div class="banner-strip">
             <img
               src="assets/cantus-banner.png"
-              alt="The Cantus workspace — Monaco editor, an integrated terminal running Claude Code, and git in one macOS window"
+              alt="Cantus — Claude Code GUI and IDE for macOS"
               width="1200"
-              height="630"
+              height="320"
               loading="lazy"
               decoding="async"
             />
@@ -272,20 +617,36 @@
         </div>
       </section>
 
-      <section class="block" aria-labelledby="tech-heading">
+      <section class="block" id="faq" aria-labelledby="faq-heading">
         <div class="wrap">
-          <h2 id="tech-heading">Composed, not reinvented</h2>
-          <p class="sub">Cantus wraps mature, battle-tested components — and builds only the glue and the genuinely novel parts.</p>
-          <div class="tech">
-            <span class="chip"><b>Tauri 2</b></span>
-            <span class="chip"><b>Rust</b></span>
-            <span class="chip"><b>React</b> + TypeScript</span>
-            <span class="chip"><b>Monaco</b></span>
-            <span class="chip"><b>xterm.js</b></span>
-            <span class="chip"><b>libgit2</b></span>
-            <span class="chip"><b>SQLite</b></span>
-            <span class="chip"><b>Claude CLI</b></span>
-          </div>
+          <h2 id="faq-heading">Frequently asked</h2>
+          <p class="sub">Common questions about Cantus as a Claude Code GUI and IDE.</p>
+          <dl class="faq-list">
+            <div class="faq-item">
+              <dt>Is Cantus a GUI for Claude Code?</dt>
+              <dd>Yes. Cantus is an open-source macOS desktop app that gives Claude Code a full IDE workspace — Monaco editor, a file tree, and the real <code>claude</code> CLI running in an integrated terminal, all in one native window. It is not a chat wrapper or a session manager.</dd>
+            </div>
+            <div class="faq-item">
+              <dt>Does Cantus use the real Claude Code CLI?</dt>
+              <dd>Yes. The backend spawns the actual <code>claude</code> CLI in a PTY (pseudo-terminal) and streams its output through xterm.js. Sessions are resumable, full-width, and behave exactly as they would in a standalone terminal.</dd>
+            </div>
+            <div class="faq-item">
+              <dt>Is Cantus free and open source?</dt>
+              <dd>Yes. Cantus is MIT-licensed and free. The source is at <a href="https://github.com/manan45/Cantus">github.com/manan45/Cantus</a>. No account, no subscription, no telemetry.</dd>
+            </div>
+            <div class="faq-item">
+              <dt>Does Cantus run on Intel Macs, Windows, or Linux?</dt>
+              <dd>The current release (v1.2.0) targets macOS on Apple Silicon. Cross-platform support (Intel Mac, Windows, Linux) is on the roadmap but not yet shipped.</dd>
+            </div>
+            <div class="faq-item">
+              <dt>Is Cantus built on Electron?</dt>
+              <dd>No. Cantus is built on Tauri 2 with a Rust backend, using the OS-native webview — not Chromium/Electron. The result is a small, native binary with low memory overhead.</dd>
+            </div>
+            <div class="faq-item">
+              <dt>How do I install Cantus?</dt>
+              <dd>Via Homebrew: <code>brew tap manan45/cantus</code> then <code>brew install --cask cantus</code>. Or download the .dmg from the <a href="https://github.com/manan45/Cantus/releases">GitHub releases page</a>. The binary is currently unsigned — on first launch, right-click the app and choose Open.</dd>
+            </div>
+          </dl>
         </div>
       </section>
     </main>
@@ -296,6 +657,7 @@
         <a href="https://github.com/manan45/Cantus/releases">Releases</a> ·
         <a href="https://github.com/manan45/Cantus/blob/main/LICENSE">MIT License</a>
         <div class="sub">Cantus — Latin for <i>song</i>. Built to make you and Claude Code compose in concert.</div>
+        <div class="sub" style="margin-top:4px;">Not affiliated with Anthropic. Claude Code is a product of Anthropic, PBC.</div>
       </div>
     </footer>
   </body>
