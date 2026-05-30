@@ -1,58 +1,83 @@
 <p align="center">
-  <img src="branding/cantus-banner.png" alt="Cantus — a Claude-first coding environment" width="720">
+  <img src="branding/cantus-banner.png" alt="Cantus — a Claude-first desktop coding environment: Monaco editor, an integrated terminal running the Claude Code CLI, and built-in git in one native macOS app" width="720">
+</p>
+
+<h1 align="center">Cantus — a Claude-first desktop coding environment</h1>
+
+<p align="center">
+  <b>A native macOS IDE that puts the <a href="https://docs.claude.com/en/docs/claude-code/overview">Claude Code</a> CLI in a real terminal beside a Monaco editor and built-in git — local-first and private. Built with Tauri 2, Rust, and React.</b>
 </p>
 
 <p align="center">
-  <a href="https://github.com/manan45/Cantus/actions/workflows/ci.yml"><img src="https://github.com/manan45/Cantus/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/manan45/Cantus/actions/workflows/ci.yml"><img src="https://github.com/manan45/Cantus/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/platform-macOS%20(Apple%20Silicon)-black?logo=apple" alt="Platform: macOS">
-  <img src="https://img.shields.io/badge/built%20with-Tauri%202-24C8DB?logo=tauri&logoColor=white" alt="Built with Tauri">
+  <img src="https://img.shields.io/badge/platform-macOS%20(Apple%20Silicon)-black?logo=apple" alt="Platform: macOS Apple Silicon">
+  <img src="https://img.shields.io/badge/built%20with-Tauri%202-24C8DB?logo=tauri&logoColor=white" alt="Built with Tauri 2">
   <img src="https://img.shields.io/badge/Claude-first-D97757" alt="Claude-first">
 </p>
 
 <p align="center">
-  <b>A lightweight desktop coding environment where Claude is a first-class citizen — not a bolted-on sidebar.</b>
-</p>
-
-<p align="center">
-  <img src="branding/screenshots/workspace.png" alt="The Cantus four-pane workspace — file tree, Monaco editor, integrated terminal, and the Claude agent chat in one window" width="900">
+  <a href="https://github.com/manan45/Cantus/releases/latest"><b>Download</b></a> ·
+  <a href="#why-cantus">Why</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#how-cantus-compares">Comparison</a> ·
+  <a href="#getting-started">Getting started</a>
 </p>
 
 ---
 
 ## What is Cantus?
 
-Cantus composes mature, battle-tested components — [Monaco](https://microsoft.github.io/monaco-editor/) for editing, [xterm.js](https://xtermjs.org/) for the terminal, and [libgit2](https://libgit2.org/) for version control — into **one coherent app**, with the [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) CLI running natively in an integrated terminal right beside your editor, git, and file tree.
+**Cantus is a Claude-first desktop coding environment for macOS (Apple Silicon).** One native window puts a [Monaco](https://microsoft.github.io/monaco-editor/) editor, an integrated [xterm.js](https://xtermjs.org/) terminal running the [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) CLI in a backend-spawned PTY, [libgit2](https://libgit2.org/) git with per-hunk **and** per-line staging, resumable Claude sessions, a capability-aware task runner, and a local SQLite + FTS5 learned-memory store — all side by side.
 
-Built on [Tauri](https://tauri.app/), it ships as a small native binary with zero external setup. Everything stays on your machine: the only thing that leaves is Claude's own model API calls.
+It composes mature, battle-tested components into **one coherent app** rather than reinventing them, and builds only the glue and the genuinely novel parts. Built on [Tauri](https://tauri.app/), it ships as a small native binary with zero external setup.
+
+**Local-first and private:** everything stays on your machine — the only thing that leaves is Claude's own model API calls.
 
 > **One thesis:** the `claude` CLI you already use deserves a real IDE around it — editor, terminal, git, and file tree in one window — instead of alt-tabbing between your editor and a lone terminal.
 
-## Why
+### Install in three steps
+
+```bash
+# 1. Download the latest .dmg (macOS, Apple Silicon)
+#    https://github.com/manan45/Cantus/releases/latest
+
+# 2. Clear the quarantine flag on the unsigned build
+xattr -dr com.apple.quarantine /Applications/Cantus.app
+
+# 3. Launch Cantus and open a project
+```
+
+> Builds are currently **unsigned**, so Gatekeeper warns on first launch. Either right-click the app → **Open**, or run the `xattr` command above. Prefer building from source? See [Getting started](#getting-started).
+
+## Why Cantus?
 
 Today's tooling forces a compromise:
 
 - **Terminal agents** like Claude Code are deeply capable, but live in a bare terminal with no editor, no git UI, and no file tree beside them.
-- **GUI IDEs** bolt AI on as a panel, and you give up the terminal-native agent you actually like.
+- **GUI IDEs** bolt AI on as a side panel, and you give up the terminal-native agent you actually like.
 - **Stitching them together** makes *you* the integration layer: editor here, Claude in a terminal there, git in a third window.
 
 Cantus closes the gap by giving Claude Code a real workspace — editor, terminal, and git sharing one UI and one project.
 
-## Download
+## How Cantus compares
 
-Grab the latest `.dmg` from the [**Releases page**](https://github.com/manan45/Cantus/releases/latest) (macOS, Apple Silicon).
+|  | Cantus | Bare Claude Code in a terminal | A GUI IDE with an AI side panel |
+|---|---|---|---|
+| The agent | The real `claude` CLI in an integrated PTY | The real `claude` CLI, but alone | A bolted-on chat panel, not the CLI you know |
+| Editor | Monaco, beside the agent | None | Yes |
+| Git UI | libgit2, per-hunk **and** per-line staging | None (shell only) | Varies |
+| Stays local & private | Yes — source never leaves the machine¹ | Yes | Often cloud-assisted |
+| Footprint | Small native Tauri binary | Tiny | Large |
 
-> Builds are currently **unsigned**, so Gatekeeper will warn on first launch. Either right-click the app → **Open**, or clear the quarantine flag:
-> ```bash
-> xattr -dr com.apple.quarantine /Applications/Cantus.app
-> ```
+<sub>¹ Except Claude's own model API calls. Cantus is not affiliated with Anthropic; "Claude" and "Claude Code" are Anthropic's.</sub>
 
 ## Features
 
 - 🎛️ **Four-pane workspace** — file tree, Monaco editor, terminal, and Claude, in one resizable window.
 - 🖥️ **Claude in a real terminal** — the `claude` CLI runs in a backend-spawned PTY, full-width and resumable.
-- 📎 **Drag files into Claude** — drop any file onto the terminal to drop its path straight into the prompt.
-- 🔍 **VS Code-style diff** — split/inline views with collapsed unchanged regions and per-hunk **and** per-line stage / discard.
+- 📎 **Drag files into Claude** — drop any file onto the terminal to insert its path straight into the prompt.
+- 🔍 **VS Code-style diff** — split / inline views with collapsed unchanged regions and per-hunk **and** per-line stage / discard.
 - 🌿 **Built-in git** — status, branch switcher, stage, commit, and discard — via libgit2, no shelling out.
 - 💾 **Resumable sessions** — your Claude sessions for the project, listed and resumable from the chat pane.
 - 🎛️ **Capability-aware task runner** — describe a task; Claude summarizes which skills & agents apply (reuse / compose / build), assembles a `.claude` workflow, and runs it — orchestrating itself.
@@ -62,25 +87,35 @@ Grab the latest `.dmg` from the [**Releases page**](https://github.com/manan45/C
 
 ## Screenshots
 
-<table>
-  <tr>
-    <td width="50%">
-      <img src="branding/screenshots/terminal.png" alt="Claude running in a backend-spawned PTY terminal"><br>
-      <sub><b>Claude in a real terminal</b> — the <code>claude</code> CLI in a full-width, resumable PTY.</sub>
-    </td>
-    <td width="50%">
-      <img src="branding/screenshots/diff-view.png" alt="VS Code-style split diff with per-line staging"><br>
-      <sub><b>VS Code-style diff</b> — split / inline views with per-hunk and per-line stage / discard.</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="branding/screenshots/orchestrator.png" alt="The capability-aware task runner with its skills/agents panel and learned-memory layer"><br>
-      <sub><b>Task runner</b> — summarize capability coverage, build a <code>.claude</code> workflow, and let Claude run it; a learned-memory layer makes the next run smarter.</sub>
-    </td>
-    <td width="50%"></td>
-  </tr>
-</table>
+<p align="center">
+  <img src="branding/screenshots/workspace.png" alt="The Cantus four-pane workspace: file tree on the left, a Monaco editor in the center, the Claude Code CLI in an integrated terminal on the right, and an embedded shell below" width="900">
+  <br>
+  <sub><b>The four-pane workspace</b> — file tree, Monaco editor, the <code>claude</code> CLI in an integrated terminal, and an embedded shell, all in one resizable window.</sub>
+</p>
+
+<p align="center">
+  <img src="branding/screenshots/task-runner.png" alt="The Cantus task runner: a goal description, a panel showing which skills and agents apply, and a .claude workflow running live" width="900">
+  <br>
+  <sub><b>Capability-aware task runner</b> — describe a goal; Cantus shows which skills and agents apply, assembles a <code>.claude</code> workflow, and runs it.</sub>
+</p>
+
+<p align="center">
+  <img src="branding/screenshots/sessions.png" alt="The Cantus chat-sessions pane listing every resumable Claude session for the project" width="900">
+  <br>
+  <sub><b>Resumable sessions</b> — every Claude session for the project, listed and resumable from the chat pane.</sub>
+</p>
+
+<p align="center">
+  <img src="branding/screenshots/agents.png" alt="The Cantus Skills, Agents, and Workflows browser, each entry runnable in a click" width="900">
+  <br>
+  <sub><b>Skills, Agents &amp; Workflows browser</b> — everything available to the task runner, each runnable in a click.</sub>
+</p>
+
+<p align="center">
+  <img src="branding/screenshots/welcome.png" alt="The Cantus welcome screen with the app logo, tagline, and an Open Folder button" width="900">
+  <br>
+  <sub><b>First run</b> — open any folder to start a project.</sub>
+</p>
 
 ## Tech stack
 
@@ -92,7 +127,7 @@ Grab the latest `.dmg` from the [**Releases page**](https://github.com/manan45/C
 | Terminal | xterm.js + PTY |
 | Version control | libgit2 via the `git2` crate |
 | AI | the `claude` CLI, in the integrated terminal |
-| Local store | SQLite |
+| Local store | SQLite (with FTS5 for learned memory) |
 
 ## Getting started
 
@@ -138,7 +173,10 @@ The frontend and backend talk **only** through typed Tauri IPC commands and even
 
 - **Phase 1 — MVP** *(shipped in v1.0)* — the four-pane shell, Claude in the terminal, git with hunk/line staging, persistence.
 - **Phase 2 — Depth** *(shipped in v1.1)* — tabbed terminals, a Skills / Agents / Workflows / Sessions browser, and quick-open + project search.
-- **Phase 3 — Orchestration** *(landing in v1.1)* — a capability-aware task runner that builds and runs `.claude` workflows, plus a local learned-memory layer. Next: multi-project and cross-platform (Linux, then Windows).
+- **Phase 3 — Orchestration** *(shipped in v1.1)* — a capability-aware task runner that builds and runs `.claude` workflows, plus a local learned-memory layer.
+- **Next** — multi-project depth and cross-platform support (Linux, then Windows).
+
+See the [CHANGELOG](CHANGELOG.md) for the full release history.
 
 ## Contributing
 

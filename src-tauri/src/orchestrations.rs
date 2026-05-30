@@ -10,6 +10,7 @@ pub struct Orchestration {
     pub title: String,
     pub goal: String,
     pub tasks: Vec<String>,
+    pub session_id: Option<String>,
     pub updated_at: u64,
 }
 
@@ -19,6 +20,8 @@ pub struct OrchestrationInput {
     pub title: String,
     pub goal: String,
     pub tasks: Vec<String>,
+    #[serde(default)]
+    pub session_id: Option<String>,
 }
 
 fn now_ms() -> u64 {
@@ -42,7 +45,7 @@ pub async fn list_orchestrations(
     };
 
     let rows = sqlx::query(
-        "SELECT sid, title, goal, tasks, updated_at
+        "SELECT sid, title, goal, tasks, session_id, updated_at
          FROM orchestrations
          WHERE project_id = ?1
          ORDER BY updated_at DESC",
@@ -62,6 +65,7 @@ pub async fn list_orchestrations(
                 title: row.get("title"),
                 goal: row.get("goal"),
                 tasks,
+                session_id: row.get("session_id"),
                 updated_at: row.get::<i64, _>("updated_at") as u64,
             }
         })
@@ -89,12 +93,13 @@ pub async fn save_orchestration(
     let updated_at = now_ms() as i64;
 
     sqlx::query(
-        "INSERT INTO orchestrations (project_id, sid, title, goal, tasks, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+        "INSERT INTO orchestrations (project_id, sid, title, goal, tasks, session_id, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
          ON CONFLICT(project_id, sid) DO UPDATE SET
              title      = excluded.title,
              goal       = excluded.goal,
              tasks      = excluded.tasks,
+             session_id = excluded.session_id,
              updated_at = excluded.updated_at",
     )
     .bind(project_id)
@@ -102,6 +107,7 @@ pub async fn save_orchestration(
     .bind(&o.title)
     .bind(&o.goal)
     .bind(&tasks_json)
+    .bind(&o.session_id)
     .bind(updated_at)
     .execute(&state.db)
     .await?;

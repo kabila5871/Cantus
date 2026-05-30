@@ -1,10 +1,15 @@
 # Security Policy
 
-Cantus is a local-first desktop app. Source code and history stay on your machine; the only data that leaves the device is the Claude Agent SDK's own model API calls.
+Cantus is a local-first desktop app. Source code and history stay on your machine; the only data that leaves the device is the `claude` CLI's own model API calls.
 
 ## Supported versions
 
-Cantus is pre-1.0 and under active development. Security fixes target the latest `main`.
+Cantus is under active development and ships frequently. Security fixes land on the latest `main` and the most recent release; older releases are not separately patched.
+
+| Version | Supported |
+|---|---|
+| 1.1.x (latest) | ✅ |
+| < 1.1 | ❌ — upgrade to the latest release |
 
 ## Reporting a vulnerability
 
@@ -21,5 +26,5 @@ You can expect an acknowledgement within a few days. Please allow reasonable tim
 ## Scope of interest
 
 - Anything that could exfiltrate local source code or credentials off the device.
-- Escaping the agent's scoped read/write access to the open project directory.
-- IPC commands that perform privileged operations without proper validation.
+- IPC commands that perform privileged filesystem, process, or git operations without proper validation.
+- A path that lets the integrated terminal or task runner act outside the open project directory.

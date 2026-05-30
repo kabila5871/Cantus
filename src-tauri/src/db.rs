@@ -83,5 +83,11 @@ pub async fn open(app: &tauri::AppHandle) -> Result<SqlitePool, sqlx::Error> {
     .execute(&pool)
     .await;
 
+    // Link each task-runner record to the claude session of its last run, so a
+    // closed task can be reopened and resumed. Tolerant: errors if already added.
+    let _ = sqlx::query("ALTER TABLE orchestrations ADD COLUMN session_id TEXT")
+        .execute(&pool)
+        .await;
+
     Ok(pool)
 }

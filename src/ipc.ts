@@ -180,7 +180,14 @@ export const ptySpawn = (
 
 export const listSessions = (): Promise<SessionMeta[]> => invoke("list_sessions");
 
+export const deleteSession = (id: string): Promise<void> => invoke("delete_session", { id });
+
+export const findRunSession = (goal: string): Promise<string | null> =>
+  invoke("find_run_session", { goal });
+
 export const listClaudeAssets = (): Promise<ClaudeAssets> => invoke("list_claude_assets");
+
+export const deleteAsset = (path: string): Promise<void> => invoke("delete_asset", { path });
 
 export const ptyWrite = (id: number, data: string): Promise<void> =>
   invoke("pty_write", { id, data });
@@ -232,6 +239,7 @@ export interface Orchestration {
   title: string;
   goal: string;
   tasks: string[];
+  session_id: string | null;
   updated_at: number;
 }
 
@@ -243,6 +251,7 @@ export const saveOrchestration = (o: {
   title: string;
   goal: string;
   tasks: string[];
+  session_id: string | null;
 }): Promise<void> => invoke("save_orchestration", { o });
 
 export const deleteOrchestration = (id: string): Promise<void> =>
@@ -317,5 +326,27 @@ export const deleteMemory = (id: number): Promise<void> => invoke("delete_memory
 // against existing memories. Returns the stored memory, or null if nothing durable.
 export const distillMemory = (goal: string): Promise<Memory | null> =>
   invoke("distill_memory", { goal });
+
+// ── IDE monitor ───────────────────────────────────────────────────────────────
+
+export interface SystemStats {
+  cpu_percent: number;
+  mem_used_mb: number;
+  mem_total_mb: number;
+  app_cpu_percent: number;
+  app_mem_mb: number;
+  claude_count: number;
+  claude_cpu_percent: number;
+  claude_mem_mb: number;
+}
+
+export interface ClaudeTokens {
+  total: number;
+  today: number;
+}
+
+export const systemStats = (): Promise<SystemStats> => invoke("system_stats");
+
+export const claudeTokenUsage = (): Promise<ClaudeTokens> => invoke("claude_token_usage");
 
 

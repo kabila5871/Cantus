@@ -1,6 +1,6 @@
 # Contributing to Cantus
 
-Thanks for your interest in Cantus! This is an early-stage, MVP-focused project, so the bar for changes is "does it move the Phase 1 thesis forward and keep the codebase lean."
+Thanks for your interest in Cantus! This is a young, focused project, so the bar for changes is "does it move the thesis forward and keep the codebase lean" — give Claude Code a real IDE around it, without bloat.
 
 ## Ground rules
 
@@ -24,7 +24,7 @@ npm run tauri dev      # run the app
 npm run check          # tsc --noEmit + cargo clippy (warnings as errors)
 ```
 
-A `PostToolUse` format hook keeps edits formatted; please also run `cargo fmt` and let Prettier/ESLint run before committing.
+A `PostToolUse` format hook keeps edits formatted; please also run `cargo fmt` before committing. CI additionally runs `cargo test --manifest-path src-tauri/Cargo.toml` — run it locally to match.
 
 ## Workflow
 
@@ -36,7 +36,9 @@ A `PostToolUse` format hook keeps edits formatted; please also run `cargo fmt` a
 
 ## Scope
 
-Phase 1 is the only committed scope. Please open an issue to discuss anything in Phase 2/3 (debugging, multi-agent, skills UI, vector retrieval) before building it.
+The four-pane shell, Claude in the terminal, libgit2 git with hunk/line staging, resumable sessions, the capability-aware task runner, and the local SQLite + FTS5 learned memory have all shipped (see [CHANGELOG.md](CHANGELOG.md)). Next on the roadmap is multi-project and cross-platform support (Linux, then Windows) — see the README roadmap.
+
+Please open an issue to discuss anything large or out of scope before building it. In particular, the learned-memory store is deliberately local FTS5, not a cloud or vector service; keep it that way unless there's an issue agreeing otherwise.
 
 ## Reporting bugs / requesting features
 

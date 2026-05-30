@@ -5,6 +5,7 @@ mod db;
 mod error;
 mod git;
 mod memories;
+mod monitor;
 mod orchestrations;
 mod planner;
 mod pty;
@@ -64,10 +65,13 @@ pub fn run() {
             commands::git_discard_hunk,
             commands::git_discard_lines,
             sessions::list_sessions,
+            sessions::delete_session,
+            sessions::find_run_session,
             orchestrations::list_orchestrations,
             orchestrations::save_orchestration,
             orchestrations::delete_orchestration,
             assets::list_claude_assets,
+            assets::delete_asset,
             capabilities::list_capability_stats,
             capabilities::record_capability_use,
             planner::plan_tasks,
@@ -77,6 +81,8 @@ pub fn run() {
             memories::update_memory,
             memories::delete_memory,
             memories::distill_memory,
+            monitor::system_stats,
+            monitor::claude_token_usage,
             commands::open_in_new_window,
         ])
         // The built-in `tauri://drag-*` events were not reaching the webview

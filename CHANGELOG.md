@@ -4,6 +4,23 @@ All notable changes to Cantus are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] — 2026-05-30
+
+### Added
+
+- **IDE monitor** — a status-bar widget showing system + Cantus CPU/memory, the live count and footprint of running `claude` processes, and token usage (today + total) parsed from the project's transcripts.
+- **Delete** for skills, agents, workflows, and sessions, from their browsers.
+- **Resume a task's run** — each task remembers the `claude` session of its last run; reopen a closed task and reattach to it via `claude --resume`, with best-effort recovery of pre-existing tasks by matching the goal to a transcript.
+
+### Changed
+
+- **Task runner is now a single page** — describe a task, get an automatic gap-check summary (reuse / build) over a live skills+agents registry, then build a `.claude` workflow and let Claude run it. The terminal fills the stage on run (runner panel one click away); compact icon controls; the capability panel is a collapsible right rail that highlights the skills/agents in use.
+- Learned-memory facts are now **distilled from the run's transcript** (one durable, reconciled lesson) rather than a structural row.
+
+### Fixed
+
+- **`claude` resolution in the bundled app** — headless calls and PTY-spawned `claude` now resolve via the login-shell PATH, so the task runner and chat work in an installed `.app` (a GUI launch's minimal PATH previously hid nvm/npm installs).
+
 ## [1.1.0] — 2026-05-30
 
 ### Added
@@ -28,6 +45,14 @@ All notable changes to Cantus are documented here. The format follows
 
 - Terminal renders full-width from the first frame; distinct green/red diff colors; per-hunk Stage/Discard toolbar pinned to the editor's right edge; overscroll no longer reveals a white gap below the app.
 
+## [1.0.1] — 2026-05-29
+
+### Fixed
+
+- **Task runner planning in the bundled app** — the planner shelled out to a system `claude` via `Command::new`, which failed in a GUI-launched `.app` (the bundle inherits a minimal PATH that excludes nvm/npm installs). It now points at the bundled `claude` binary, with no PATH dependency.
+- Dropped the `--json-schema` flag and switched to a strict raw-JSON prompt plus bracket-slicing parse, so the planner tolerates stray prose or code fences instead of rejecting them.
+- Surfaced the real error message in the task runner UI instead of a generic "Planning failed".
+
 ## [1.0.0] — 2026-05-29
 
 First public release. The four-pane, Claude-first coding environment is feature-complete for daily use on macOS (Apple Silicon).
@@ -49,4 +74,5 @@ First public release. The four-pane, Claude-first coding environment is feature-
 - Release binaries are **unsigned** until Apple signing secrets are configured — see the download notes in the README for how to open an unsigned build.
 
 [1.1.0]: https://github.com/manan45/Cantus/releases/tag/v1.1.0
+[1.0.1]: https://github.com/manan45/Cantus/releases/tag/v1.0.1
 [1.0.0]: https://github.com/manan45/Cantus/releases/tag/v1.0.0

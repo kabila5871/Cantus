@@ -57,7 +57,38 @@ pub(crate) fn locate_claude() -> PathBuf {
             }
         }
     }
+    // Search the login-shell PATH — a bundled `.app`'s minimal PATH misses nvm/npm.
+    if let Some(path) = login_path() {
+        for dir in path.split(':') {
+            let p = std::path::Path::new(dir).join(exe);
+            if p.is_file() {
+                return p;
+            }
+        }
+    }
     PathBuf::from(exe)
+}
+
+/// The user's full PATH from a login+interactive shell, computed once. A
+/// GUI-launched `.app` inherits a minimal PATH; this recovers nvm/npm/etc.
+pub(crate) fn login_path() -> Option<String> {
+    use std::sync::OnceLock;
+    static CACHE: OnceLock<Option<String>> = OnceLock::new();
+    CACHE
+        .get_or_init(|| {
+            let shell = std::env::var("SHELL").ok()?;
+            let out = Command::new(&shell)
+                .args(["-ilc", "printf 'CANTUS_PATH=%s' \"$PATH\""])
+                .output()
+                .ok()?;
+            if !out.status.success() {
+                return None;
+            }
+            let s = String::from_utf8_lossy(&out.stdout);
+            let p = s.rsplit("CANTUS_PATH=").next()?.trim().to_owned();
+            (!p.is_empty()).then_some(p)
+        })
+        .clone()
 }
 
 #[tauri::command]

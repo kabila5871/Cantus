@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listClaudeAssets, type AssetItem, type ClaudeAssets } from "./ipc";
+import { listClaudeAssets, deleteAsset, type AssetItem, type ClaudeAssets } from "./ipc";
 
 interface AssetBrowserProps {
   kind: "skills" | "agents" | "workflows";
@@ -26,6 +26,17 @@ export function AssetBrowser({ kind, onClose, onRun }: AssetBrowserProps) {
   }, []);
 
   const items: AssetItem[] = assets ? assets[kind] : [];
+
+  const remove = (item: AssetItem) => {
+    if (!window.confirm(`Delete ${kind.slice(0, -1)} "${item.name}"? This removes it from disk.`)) return;
+    deleteAsset(item.path)
+      .then(() =>
+        setAssets((prev) =>
+          prev ? { ...prev, [kind]: prev[kind].filter((a) => a.path !== item.path) } : prev,
+        ),
+      )
+      .catch((e: { message?: string }) => setError(e.message ?? "Delete failed"));
+  };
 
   return (
     <div className="asset-browser">
@@ -62,6 +73,9 @@ export function AssetBrowser({ kind, onClose, onRun }: AssetBrowserProps) {
               onClick={() => onRun(invocationFor(kind, item))}
             >
               Run
+            </button>
+            <button className="asset-row__delete" title={`Delete ${item.name}`} onClick={() => remove(item)}>
+              Delete
             </button>
           </div>
         ))}

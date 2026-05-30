@@ -13,6 +13,7 @@ interface SessionRecord {
   title: string;
   goal: string;
   tasks: string[];
+  sessionId: string | null;
 }
 
 let orchSeq = 0;
@@ -22,6 +23,7 @@ function makeSession(): SessionRecord {
     title: `Task ${++orchSeq}`,
     goal: "",
     tasks: [""],
+    sessionId: null,
   };
 }
 
@@ -47,6 +49,7 @@ export function OrchestratorView({ visible, onClose }: OrchestratorViewProps) {
         title: session.title,
         goal: session.goal,
         tasks: session.tasks,
+        session_id: session.sessionId,
       }).catch(() => {});
     }, 400);
     saveTimers.current.set(session.id, timer);
@@ -62,6 +65,7 @@ export function OrchestratorView({ visible, onClose }: OrchestratorViewProps) {
               title: o.title,
               goal: o.goal,
               tasks: o.tasks.length ? o.tasks : [""],
+              sessionId: o.session_id,
             })),
           );
           setActiveId(list[0].id);
@@ -193,6 +197,8 @@ export function OrchestratorView({ visible, onClose }: OrchestratorViewProps) {
                 onGoalChange={(g) => updateSession(s.id, { goal: g })}
                 onRename={() => startRename(s.id, s.title)}
                 onClose={() => closeSession(s.id)}
+                runSessionId={s.sessionId}
+                onRunSession={(sid) => updateSession(s.id, { sessionId: sid })}
               />
             </div>
           ))

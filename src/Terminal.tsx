@@ -38,6 +38,7 @@ export function Terminal({ program, args, visible = true, onPty, onExit }: Termi
     const term = new XTerm({
       fontFamily: '"JetBrains Mono", Menlo, monospace',
       fontSize: 13,
+      scrollback: 5000,
       theme: {
         background: "#0e1014",
         foreground: "#e4e7ee",

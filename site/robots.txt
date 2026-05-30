@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://manan45.github.io/Cantus/sitemap.xml

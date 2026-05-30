@@ -1,4 +1,5 @@
 import { useStore } from "./store";
+import { Monitor } from "./Monitor";
 
 export function StatusBar() {
   const store = useStore();
@@ -33,6 +34,8 @@ export function StatusBar() {
       )}
 
       <span className="status-bar__spacer" />
+
+      <Monitor />
     </div>
   );
 }

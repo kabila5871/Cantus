@@ -45,6 +45,103 @@ pub fn list_sessions(
     Ok(sessions)
 }
 
+/// Delete a Claude Code session transcript for the open project. This writes
+/// under ~/.claude — a deliberate, user-initiated exception to the read-only rule.
+#[tauri::command]
+pub fn delete_session(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), CommandError> {
+    if id.contains('/') || id.contains('\\') || id.contains("..") {
+        return Err(CommandError::Forbidden("invalid session id".into()));
+    }
+    let root_str = {
+        let guard = state.open.lock().unwrap();
+        match guard.get(window.label()) {
+            Some(p) => p.root.to_string_lossy().into_owned(),
+            None => return Err(CommandError::NoProject),
+        }
+    };
+    let home = std::env::var("HOME").unwrap_or_default();
+    let encoded = root_str.replace(['/', '.'], "-");
+    let path = PathBuf::from(&home)
+        .join(".claude")
+        .join("projects")
+        .join(&encoded)
+        .join(format!("{id}.jsonl"));
+    std::fs::remove_file(&path).map_err(|e| CommandError::Io(e.to_string()))?;
+    Ok(())
+}
+
+/// Best-effort: find the session whose first user message contains this goal.
+/// Used to relink a task created before run-session tracking existed (its
+/// transcript persists in ~/.claude even though no session id was stored).
+#[tauri::command]
+pub fn find_run_session(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    goal: String,
+) -> Result<Option<String>, CommandError> {
+    let needle: String = goal.trim().chars().take(80).collect();
+    if needle.is_empty() {
+        return Ok(None);
+    }
+    let root_str = {
+        let guard = state.open.lock().unwrap();
+        match guard.get(window.label()) {
+            Some(p) => p.root.to_string_lossy().into_owned(),
+            None => return Ok(None),
+        }
+    };
+    let home = std::env::var("HOME").unwrap_or_default();
+    let encoded = root_str.replace(['/', '.'], "-");
+    let dir = PathBuf::from(&home)
+        .join(".claude")
+        .join("projects")
+        .join(&encoded);
+    let rd = match std::fs::read_dir(&dir) {
+        Ok(r) => r,
+        Err(_) => return Ok(None),
+    };
+
+    let mut best: Option<(std::time::SystemTime, String)> = None;
+    for entry in rd.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+            continue;
+        }
+        match first_user_text(&path) {
+            Some(text) if text.contains(&needle) => {}
+            _ => continue,
+        }
+        let id = match path.file_stem().and_then(|s| s.to_str()) {
+            Some(s) => s.to_owned(),
+            None => continue,
+        };
+        let mtime = entry
+            .metadata()
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .unwrap_or(UNIX_EPOCH);
+        if best.as_ref().map(|(t, _)| mtime > *t).unwrap_or(true) {
+            best = Some((mtime, id));
+        }
+    }
+    Ok(best.map(|(_, id)| id))
+}
+
+fn first_user_text(path: &Path) -> Option<String> {
+    let f = std::fs::File::open(path).ok()?;
+    for line in BufReader::new(f).lines().map_while(Result::ok) {
+        if line.contains("\"type\":\"user\"") || line.contains("\"role\":\"user\"") {
+            return extract_string_field(&line, "text")
+                .or_else(|| extract_string_field(&line, "content"));
+        }
+    }
+    None
+}
+
 fn collect_sessions(dir: &Path) -> Result<Vec<SessionMeta>, CommandError> {
     let rd = std::fs::read_dir(dir).map_err(|e| CommandError::Io(e.to_string()))?;
     let mut result = Vec::new();

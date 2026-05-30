@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listSessions, type SessionMeta } from "./ipc";
+import { listSessions, deleteSession, type SessionMeta } from "./ipc";
 
 function relativeTime(ms: number): string {
   const diff = Date.now() - ms;
@@ -28,6 +28,13 @@ export function SessionsView({ onClose, onOpen }: SessionsViewProps) {
       );
   }, []);
 
+  const remove = (s: SessionMeta) => {
+    if (!window.confirm(`Delete session "${s.title.slice(0, 60)}"? This removes its transcript from disk.`)) return;
+    deleteSession(s.id)
+      .then(() => setSessions((prev) => (prev ? prev.filter((x) => x.id !== s.id) : prev)))
+      .catch((e: { message?: string }) => setError(e.message ?? "Delete failed"));
+  };
+
   return (
     <div className="asset-browser">
       <div className="asset-browser__header">
@@ -45,20 +52,25 @@ export function SessionsView({ onClose, onOpen }: SessionsViewProps) {
           <div className="asset-browser__empty">No sessions for this project.</div>
         )}
         {sessions?.map((s) => (
-          <button key={s.id} className="session-row" onClick={() => onOpen(s)}>
-            <span className="session-row__title">
-              {s.title.length > 60 ? s.title.slice(0, 60) + "…" : s.title}
-            </span>
-            <span className="session-row__meta">
-              {s.git_branch && (
-                <span className="session-row__branch">{s.git_branch}</span>
-              )}
-              <span className="session-row__time">{relativeTime(s.updated_at)}</span>
-              <span className="session-row__count">
-                {s.message_count} msg{s.message_count !== 1 ? "s" : ""}
+          <div key={s.id} className="session-row">
+            <button className="session-row__open" onClick={() => onOpen(s)}>
+              <span className="session-row__title">
+                {s.title.length > 60 ? s.title.slice(0, 60) + "…" : s.title}
               </span>
-            </span>
-          </button>
+              <span className="session-row__meta">
+                {s.git_branch && (
+                  <span className="session-row__branch">{s.git_branch}</span>
+                )}
+                <span className="session-row__time">{relativeTime(s.updated_at)}</span>
+                <span className="session-row__count">
+                  {s.message_count} msg{s.message_count !== 1 ? "s" : ""}
+                </span>
+              </span>
+            </button>
+            <button className="asset-row__delete" title="Delete session" onClick={() => remove(s)}>
+              Delete
+            </button>
+          </div>
         ))}
       </div>
     </div>

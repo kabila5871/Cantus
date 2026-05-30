@@ -63,6 +63,53 @@ pub fn list_claude_assets(
     })
 }
 
+/// Delete a Claude asset by its path. Validated to live under a `.claude/{skills,
+/// agents,workflows}` dir (user or project). Skills are a directory; agents and
+/// workflows are single files. Deleting under ~/.claude is a deliberate,
+/// user-initiated exception to the read-only rule.
+#[tauri::command]
+pub fn delete_asset(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<(), CommandError> {
+    let p = PathBuf::from(&path);
+    let home = std::env::var("HOME").unwrap_or_default();
+    let mut bases = vec![PathBuf::from(&home).join(".claude")];
+    if let Some(root) = state
+        .open
+        .lock()
+        .unwrap()
+        .get(window.label())
+        .map(|x| x.root.clone())
+    {
+        bases.push(root.join(".claude"));
+    }
+    let allowed = bases.iter().any(|base| {
+        ["skills", "agents", "workflows"]
+            .iter()
+            .any(|sub| p.starts_with(base.join(sub)))
+    });
+    if !allowed {
+        return Err(CommandError::Forbidden(format!(
+            "not a Claude asset path: {path}"
+        )));
+    }
+
+    // A skill is the directory holding SKILL.md; agents/workflows are files.
+    let target = if p.file_name().and_then(|n| n.to_str()) == Some("SKILL.md") {
+        p.parent().map(Path::to_path_buf).unwrap_or(p)
+    } else {
+        p
+    };
+    if target.is_dir() {
+        std::fs::remove_dir_all(&target).map_err(|e| CommandError::Io(e.to_string()))?;
+    } else {
+        std::fs::remove_file(&target).map_err(|e| CommandError::Io(e.to_string()))?;
+    }
+    Ok(())
+}
+
 /// Scan `<base>/skills/*/SKILL.md` and push one `AssetItem` per skill dir.
 fn collect_skills(base: &Path, scope: &str, out: &mut Vec<AssetItem>) {
     let skills_dir = base.join("skills");

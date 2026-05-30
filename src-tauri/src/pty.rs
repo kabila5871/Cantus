@@ -47,7 +47,14 @@ pub fn spawn(
         // A named program (e.g. "claude") runs with the parent environment so it
         // resolves on PATH, plus a usable TERM since it never sources a profile.
         Some(prog) => {
-            let mut c = CommandBuilder::new(&prog);
+            // Resolve `claude` to an absolute path and inject the login-shell PATH
+            // so a bundled `.app` (minimal PATH) still finds it and its child tools.
+            let resolved = if prog == "claude" {
+                crate::planner::locate_claude()
+            } else {
+                std::path::PathBuf::from(&prog)
+            };
+            let mut c = CommandBuilder::new(resolved);
             if let Some(ref argv) = args {
                 for a in argv {
                     c.arg(a);
@@ -55,6 +62,9 @@ pub fn spawn(
             }
             for (k, v) in std::env::vars() {
                 c.env(k, v);
+            }
+            if let Some(path) = crate::planner::login_path() {
+                c.env("PATH", path);
             }
             c.env("TERM", "xterm-256color");
             c
