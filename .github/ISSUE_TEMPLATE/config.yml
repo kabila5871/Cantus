@@ -1,8 +1,0 @@
-blank_issues_enabled: false
-contact_links:
-  - name: Questions & ideas
-    url: https://github.com/manan45/Cantus/discussions
-    about: Ask questions and discuss ideas in Discussions.
-  - name: Security vulnerability
-    url: https://github.com/manan45/Cantus/security/advisories/new
-    about: Please report security issues privately, not as public issues.
